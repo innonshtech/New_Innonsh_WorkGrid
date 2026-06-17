@@ -3,6 +3,9 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/db/prisma";
 import nodemailer from "nodemailer";
 
+export const dynamic = 'force-dynamic';
+
+
 // Configure nodemailer transporter
 const createTransporter = () => {
   const host = process.env.EMAIL_HOST || "smtp.gmail.com";
