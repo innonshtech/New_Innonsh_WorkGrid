@@ -1,5 +1,8 @@
 // src/app/api/cron/trigger/route.js
 import { NextResponse } from "next/server";
+import { headers } from "next/headers";
+
+export const dynamic = 'force-dynamic';
 
 // POST - Manually trigger attendance report
 export async function POST(request) {
