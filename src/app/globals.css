@@ -1,0 +1,284 @@
+@import "tailwindcss";
+
+html {
+  font-size: 12.5px; /* System-wide layout scale: beautifully compacts typography, spacing, gaps, and elements globally */
+}
+
+@theme {
+  --font-sans: "Google Sans", sans-serif;
+  /* Brand Colors - Blueprint Palette */
+  /* Mapping the provided blues to Indigo to override current brand colors */
+  --color-indigo-50: #f0f6fc;
+  --color-indigo-100: #e1eaf5;
+  --color-indigo-200: #c2d5ed;
+  --color-indigo-300: #9fbce3;
+  --color-indigo-400: #6ca1db;
+  --color-indigo-500: #3a86d4;
+  /* Interpolated */
+  --color-indigo-600: #0466c8;
+  /* Provided #1 */
+  --color-indigo-700: #0353a4;
+  /* Provided #2 */
+  --color-indigo-800: #023e7d;
+  /* Provided #3 */
+  --color-indigo-900: #002855;
+  /* Provided #4 */
+  --color-indigo-950: #001845;
+  /* Provided #5 */
+
+  /* Neutral Colors - Cool Greys */
+  /* Mapping the provided greys to Slate to override current neutrals */
+  --color-slate-50: #f6f7f9;
+  --color-slate-100: #eceef2;
+  --color-slate-200: #dce0e6;
+  --color-slate-300: #bdc2cc;
+  --color-slate-400: #979dac;
+  /* Provided #10 */
+  --color-slate-500: #7d8597;
+  /* Provided #9 */
+  --color-slate-600: #5c677d;
+  /* Provided #8 */
+  --color-slate-700: #33415c;
+  /* Provided #7 */
+  --color-slate-800: #1a2542;
+  /* Interpolated darkening */
+  --color-slate-900: #001233;
+  /* Provided #6 */
+  /* Darker tint */
+  --color-slate-950: #000a1f;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  /* IE and Edge */
+  scrollbar-width: none;
+  /* Firefox */
+}
+
+/* ========== Global Font System ========== */
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Regular.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Google Sans';
+  src: url('/fonts/GoogleSans-Italic.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Apply Google Sans to all typical text elements */
+body, h1, h2, h3, h4, h5, h6, p, span, a, label, .label, .text-xs, .text-sm, div, button, input, textarea, select, table, th, td {
+  font-family: 'Google Sans', sans-serif !important;
+}
+
+/* ===================================================================
+   GLOBAL RESPONSIVE LAYER — Mobile-First System-Wide Overrides
+   Fixes tables, grids, modals, headers, spacing across ALL pages
+   =================================================================== */
+
+/* ── 1. Responsive Tables ── */
+/* Wrap all table containers in horizontal scroll on mobile */
+@media (max-width: 1024px) {
+  /* Any div containing a <table> gets horizontal scroll */
+  .overflow-x-auto,
+  div:has(> table) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Prevent tables from squishing — set a minimum width */
+  table {
+    min-width: 700px;
+  }
+
+  /* Make table cells not wrap text so columns stay clean */
+  th, td {
+    white-space: nowrap;
+  }
+}
+
+/* ── 2. Responsive Grid Stacking ── */
+/* On mobile, stack multi-column grids to single column */
+@media (max-width: 640px) {
+  /* 2-col grids → 1-col on mobile (unless they already have responsive breakpoints) */
+  .grid-cols-2:not([class*="sm:grid-cols"]):not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  /* 3-col grids → 1-col on mobile */
+  .grid-cols-3:not([class*="sm:grid-cols"]):not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  /* 4-col grids → 2-col on mobile */
+  .grid-cols-4:not([class*="sm:grid-cols"]):not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  /* 12-col grids (common for filter layouts) → stack */
+  .grid-cols-12:not([class*="sm:grid-cols"]):not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+
+  /* Make grid column spans full-width on mobile */
+  [class*="col-span-"]:not([class*="sm:col-span"]):not([class*="md:col-span"]):not([class*="lg:col-span"]) {
+    grid-column: span 1 / span 1 !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  /* 4-col grids → 2-col on tablet */
+  .grid-cols-4:not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .grid-cols-3:not([class*="md:grid-cols"]):not([class*="lg:grid-cols"]) {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+/* ── 3. Responsive Modals / Dialogs / Drawers ── */
+@media (max-width: 640px) {
+  /* Make modals/dialogs full-width on mobile */
+  [role="dialog"],
+  [data-radix-portal] > div > div,
+  .fixed.inset-0 > div {
+    max-width: 100% !important;
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 1rem 1rem 0 0 !important;
+  }
+
+  /* Reduce dialog internal padding on mobile */
+  [role="dialog"] > div {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+}
+
+/* ── 4. Responsive Page Padding ── */
+@media (max-width: 640px) {
+  /* Reduce page-level padding on mobile */
+  .p-8 { padding: 1rem !important; }
+  .p-6 { padding: 0.75rem !important; }
+  .px-8 { padding-left: 1rem !important; padding-right: 1rem !important; }
+  .px-6 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+  .py-8 { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+
+  /* Reduce heading sizes on mobile for better fit */
+  .text-3xl { font-size: 1.5rem !important; line-height: 2rem !important; }
+  .text-4xl { font-size: 1.75rem !important; line-height: 2.25rem !important; }
+  .text-2xl { font-size: 1.25rem !important; line-height: 1.75rem !important; }
+}
+
+/* ── 5. Responsive Flex Headers & Action Bars ── */
+@media (max-width: 640px) {
+  /* Common header pattern: flex justify-between → stack on mobile */
+  .flex.justify-between.items-center:has(> button),
+  .flex.justify-between.items-center:has(> .flex) {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Action button groups: wrap instead of overflow */
+  .flex.items-center.gap-2,
+  .flex.items-center.gap-3,
+  .flex.items-center.gap-4,
+  .flex.items-center.space-x-2,
+  .flex.items-center.space-x-3,
+  .flex.items-center.space-x-4 {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── 6. Responsive Stat / KPI Cards ── */
+@media (max-width: 640px) {
+  /* Make stat card values smaller on mobile */
+  .text-5xl { font-size: 2rem !important; }
+
+  /* Reduce card internal padding on mobile */
+  .p-7 { padding: 1.25rem !important; }
+
+  /* Rounded corners — slightly reduce on mobile */
+  .rounded-\[2rem\] { border-radius: 1.25rem !important; }
+  .rounded-\[1\.5rem\] { border-radius: 1rem !important; }
+}
+
+/* ── 7. Responsive Tab Navigation ── */
+@media (max-width: 768px) {
+  /* Tab navigation: allow horizontal scroll with snap */
+  nav.flex.gap-1\.5,
+  nav.flex.gap-2,
+  .flex.gap-1\.5:has(> button) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  nav.flex.gap-1\.5::-webkit-scrollbar,
+  nav.flex.gap-2::-webkit-scrollbar,
+  .flex.gap-1\.5:has(> button)::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Each tab button snaps */
+  nav.flex.gap-1\.5 > button,
+  nav.flex.gap-2 > button,
+  .flex.gap-1\.5:has(> button) > button {
+    scroll-snap-align: start;
+    flex-shrink: 0;
+  }
+}
+
+/* ── 8. Responsive Images & Media ── */
+@media (max-width: 640px) {
+  img:not(.shrink-0) {
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* ── 9. Utility: Hide non-essential elements on mobile ── */
+@media (max-width: 640px) {
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+@media (min-width: 641px) {
+  .show-only-mobile {
+    display: none !important;
+  }
+}
+*, ::before, ::after { border-color: #E5E7EB; }
+
+/* Custom scrollbars for custom-scrollbar class */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+

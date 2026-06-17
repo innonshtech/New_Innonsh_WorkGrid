@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  workgrid-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGODB_URI=mongodb://mongo:27017/workgrid
+      - JWT_SECRET=fallback_secret_change_me
+    depends_on:
+      - mongo
+    networks:
+      - workgrid-network
+
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - workgrid-network
+
+volumes:
+  mongo-data:
+
+networks:
+  workgrid-network:
+    driver: bridge

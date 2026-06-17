@@ -1,0 +1,6 @@
+import { NextResponse } from 'next/server';
+import prisma from '@/lib/db/prisma';
+
+export async function GET() {
+    return NextResponse.json({ status: 'ok', has_db: !!prisma });
+}

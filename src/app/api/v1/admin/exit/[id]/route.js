@@ -1,0 +1,143 @@
+import prisma from '@/lib/db/prisma';
+
+import { NextResponse } from "next/server";
+import { getAuthUser, authorize } from "@/lib/auth-util";
+
+function isValidUUID(str) {
+    if (!str || typeof str !== 'string') return false;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+}
+
+async function getPopulatedEmployee(employeeId) {
+    if (!employeeId) return null;
+    const emp = await prisma.employee.findFirst({
+        where: isValidUUID(employeeId)
+            ? { OR: [{ id: employeeId }, { mongoId: employeeId }] }
+            : { mongoId: employeeId },
+        select: { id: true, mongoId: true, firstName: true, lastName: true, email: true, department: true, designation: true }
+    });
+    if (!emp) return null;
+    return {
+        _id: emp.id,
+        personalDetails: {
+            firstName: emp.firstName,
+            lastName: emp.lastName,
+            email: emp.email
+        },
+        jobDetails: {
+            department: emp.department,
+            designation: emp.designation
+        }
+    };
+}
+
+export async function GET(request, { params }) {
+    try {
+        const authUser = await getAuthUser();
+        authorize(authUser, ["admin", "hr", "company_admin", "super_admin"]);
+
+        
+        const { id } = await params;
+        const exitRequest = await prisma.exitRequest.findFirst({
+            where: isValidUUID(id) ? { OR: [{ id: id }, { mongoId: id }] } : { mongoId: id }
+        });
+        if (!exitRequest) {
+            return NextResponse.json({ error: "Exit request not found" }, { status: 404 });
+        }
+        
+        const employeeData = await getPopulatedEmployee(exitRequest.employeeId);
+        const exitData = exitRequest.exitData || {};
+        return NextResponse.json({ ...exitRequest, ...exitData, _id: exitRequest.id, employee: employeeData });
+    } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
+export async function PUT(request, { params }) {
+    try {
+        const authUser = await getAuthUser();
+        authorize(authUser, ["admin", "hr", "company_admin", "super_admin"]);
+
+        
+        const { id } = await params;
+        const body = await request.json();
+
+        const exitRequest = await prisma.exitRequest.findFirst({
+            where: isValidUUID(id) ? { OR: [{ id: id }, { mongoId: id }] } : { mongoId: id }
+        });
+        if (!exitRequest) {
+            return NextResponse.json({ error: "Exit request not found" }, { status: 404 });
+        }
+
+        const exitData = exitRequest.exitData || {};
+        exitData.clearanceStatus = exitData.clearanceStatus || {};
+        
+        let newStatus = exitRequest.status;
+        let newLastWorkingDate = exitRequest.lastWorkingDate;
+
+        // Logic for Status Updates based on approvals
+        // If Manager approves, status -> Manager_Approved
+        if (body.outcome === "ManagerApprove") {
+            exitData.managerApproval = {
+                status: "Approved",
+                approvedBy: body.approvedBy,
+                approvalDate: new Date(),
+                comments: body.comments
+            };
+            newStatus = "Manager_Approved";
+        } else if (body.outcome === "ManagerReject") {
+            exitData.managerApproval = {
+                status: "Rejected",
+                approvedBy: body.approvedBy,
+                approvalDate: new Date(),
+                comments: body.comments
+            };
+            newStatus = "Rejected";
+        }
+
+        // If HR approves (after Manager), status -> HR_Approved (or Completed/Processing?)
+        // Let's say HR_Approved starts the clearance process
+        if (body.outcome === "HRApprove") {
+            exitData.hrApproval = {
+                status: "Approved",
+                approvedBy: body.approvedBy,
+                approvalDate: new Date(),
+                comments: body.comments
+            };
+            newStatus = "HR_Approved";
+        }
+
+        // Clearance Updates
+        if (body.clearanceType) { // e.g., 'it', 'finance', 'admin'
+            exitData.clearanceStatus[body.clearanceType] = {
+                status: body.status, // Cleared
+                remarks: body.remarks,
+                clearedBy: body.clearedBy,
+                clearedDate: new Date()
+            };
+        }
+
+        // Generic update fallback
+        if (body.status && !body.outcome) {
+            newStatus = body.status;
+        }
+
+        // Save any other fields passed directly
+        if (body.lastWorkingDate) newLastWorkingDate = new Date(body.lastWorkingDate);
+        if (body.fnfStatus) exitData.fnfStatus = body.fnfStatus;
+
+        const updatedExitRequest = await prisma.exitRequest.update({
+            where: { id: exitRequest.id },
+            data: {
+                status: newStatus,
+                lastWorkingDate: newLastWorkingDate,
+                exitData
+            }
+        });
+
+        const employeeData = await getPopulatedEmployee(updatedExitRequest.employeeId);
+        return NextResponse.json({ ...updatedExitRequest, ...exitData, _id: updatedExitRequest.id, employee: employeeData });
+    } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+}

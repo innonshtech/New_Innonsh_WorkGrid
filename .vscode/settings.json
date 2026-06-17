@@ -1,0 +1,7 @@
+{
+    "workbench.browser.dataStorage": "workspace",
+    "workbench.browser.openLocalhostLinks": false,
+    "editor.guides.highlightActiveIndentation": false,
+    "editor.guides.indentation": false,
+    "workbench.tree.renderIndentGuides": "none"
+}
