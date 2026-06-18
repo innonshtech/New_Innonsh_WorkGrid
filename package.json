@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "postinstall": "prisma generate",
     "cron:test": "node -e \"require('./src/lib/cron/attendance-cron').triggerAttendanceReportNow()\""
   },
   "dependencies": {
