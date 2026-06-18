@@ -1,18 +1,18 @@
 import { PrismaClient } from '@prisma/client'
 
-const prismaClientSingleton = () => {
-  // Prevent Prisma from crashing Vercel's build container if DB URL is missing during the static build phase
-  if (!process.env.DATABASE_URL) {
-    console.warn("⚠️ DATABASE_URL is missing. Returning mock PrismaClient to prevent build crashes.");
-    return {};
-  }
-  return new PrismaClient();
-}
-
-// Ensure there is only one Prisma instance globally
 const globalForPrisma = globalThis
 
-const prisma = globalForPrisma.prisma ?? prismaClientSingleton()
+// Use a Proxy to strictly lazy-load the PrismaClient.
+// This guarantees `new PrismaClient()` is NEVER called during Vercel's build phase (which causes SIGSEGVs and Initialization errors)
+// because Turbopack only traces imports but doesn't execute queries.
+const prisma = globalForPrisma.prisma || new Proxy({}, {
+  get(target, prop) {
+    if (!globalForPrisma._prismaInstance) {
+      globalForPrisma._prismaInstance = new PrismaClient();
+    }
+    return globalForPrisma._prismaInstance[prop];
+  }
+});
 
 export default prisma
 
