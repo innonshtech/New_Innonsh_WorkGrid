@@ -1,13 +1,13 @@
-// src/app/api/cron/attendance-report/route.js
 import { NextResponse } from "next/server";
-import prisma from "@/lib/db/prisma";
-import nodemailer from "nodemailer";
 
 export const dynamic = 'force-dynamic';
 
 
+
+
 // Configure nodemailer transporter
-const createTransporter = () => {
+const createTransporter = async () => {
+  const { default: nodemailer } = await import('nodemailer');
   const host = process.env.EMAIL_HOST || "smtp.gmail.com";
   const port = parseInt(process.env.EMAIL_PORT || "587");
   const user = process.env.EMAIL_USER;
@@ -264,9 +264,11 @@ const generateEmailHTML = (reportData) => {
   `;
 };
 
-// Main function to generate and send report
 async function generateAndSendReport() {
   try {
+    const { default: prisma } = await import('@/lib/db/prisma');
+    const { default: nodemailer } = await import('nodemailer');
+    
     // Get today's date (start and end of day)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -425,7 +427,7 @@ async function generateAndSendReport() {
     const emailHTML = generateEmailHTML(reportData);
 
     // Send email
-    const transporter = createTransporter();
+    const transporter = await createTransporter();
 
     const recipientEmail = process.env.ATTENDANCE_REPORT_EMAIL || process.env.EMAIL_USER;
 

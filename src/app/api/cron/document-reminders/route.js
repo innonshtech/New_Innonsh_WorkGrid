@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import prisma from '@/lib/db/prisma';
-import { sendDocumentReminderNotification } from "@/utils/notifications";
 
 export const dynamic = 'force-dynamic';
 
 // Function to process document reminders
 async function processDocumentReminders() {
   try {
+    const { default: prisma } = await import('@/lib/db/prisma');
+    const { sendDocumentReminderNotification } = await import("@/utils/notifications");
+    
     console.log("🔄 Processing document reminders...");
 
     const now = new Date();
