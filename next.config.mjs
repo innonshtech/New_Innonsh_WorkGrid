@@ -19,10 +19,7 @@ const nextConfig = {
         mcpServer: false
     },
     distDir,
-    serverExternalPackages: ['jspdf', 'fflate', 'node-cron', 'nodemailer', '@prisma/client', 'bcrypt'],
-    turbopack: {
-        root: projectRoot
-    }
+    serverExternalPackages: ['jspdf', 'fflate', 'node-cron', 'nodemailer', '@prisma/client', 'bcrypt']
 };
 
 export default nextConfig;
