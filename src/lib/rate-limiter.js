@@ -11,9 +11,9 @@ const isDev = process.env.NODE_ENV === 'development';
  * Rate limit configuration
  */
 export const RateLimitConfig = {
-  LOGIN: { windowMs: 15 * 60 * 1000, max: isDev ? 1000 : 5 }, // Allow 1000 in dev, 5 in prod
-  API: { windowMs: 60 * 1000, max: isDev ? 10000 : 100 },
-  DEFAULT: { windowMs: 60 * 1000, max: isDev ? 5000 : 60 },
+  LOGIN: { windowMs: 15 * 60 * 1000, max: 1000 }, // Increased to 1000 for all environments
+  API: { windowMs: 60 * 1000, max: 10000 },
+  DEFAULT: { windowMs: 60 * 1000, max: 5000 },
 };
 
 /**
