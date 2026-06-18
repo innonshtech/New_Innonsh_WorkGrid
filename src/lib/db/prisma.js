@@ -1,7 +1,12 @@
 import { PrismaClient } from '@prisma/client'
 
 const prismaClientSingleton = () => {
-  return new PrismaClient()
+  // Prevent Prisma from crashing Vercel's build container if DB URL is missing during the static build phase
+  if (!process.env.DATABASE_URL) {
+    console.warn("⚠️ DATABASE_URL is missing. Returning mock PrismaClient to prevent build crashes.");
+    return {};
+  }
+  return new PrismaClient();
 }
 
 // Ensure there is only one Prisma instance globally
