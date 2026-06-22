@@ -1487,3 +1487,546 @@ model Userconst {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAYROLL MANAGEMENT SYSTEM V2 — CONFIGURATION-DRIVEN CALCULATION ENGINE
+// All rules, formulas, slabs, and percentages are stored here — NOTHING HARDCODED
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Salary Component Master ──
+// Defines every possible earning/deduction component and its formula
+model PayrollComponentMaster {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  code              String    // e.g., "BASIC", "HRA", "DA", "SPECIAL_ALLOWANCE"
+  name              String    // Display name
+  category          String    // "EARNING", "DEDUCTION", "EMPLOYER_CONTRIBUTION"
+  subCategory       String?   // "FIXED", "VARIABLE", "STATUTORY", "VOLUNTARY"
+  formulaType       String    // "FIXED", "PERCENTAGE", "DERIVED", "CONDITIONAL", "SLAB", "CUSTOM_EXPRESSION"
+  formulaConfig     Json      // The formula definition (varies by formulaType)
+  dependsOn         String[]  // Component codes this formula needs (for execution ordering)
+  isTaxable         Boolean   @default(true)
+  isPartOfGross     Boolean   @default(true)
+  isPartOfCTC       Boolean   @default(true)
+  isPFWageComponent Boolean   @default(false)
+  isESIWageComponent Boolean  @default(false)
+  displayOrder      Int       @default(0)
+  isActive          Boolean   @default(true)
+  effectiveFrom     DateTime  @default(now())
+  effectiveTo       DateTime?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([organizationId, code, effectiveFrom])
+  @@index([organizationId, isActive])
+}
+
+// ── Salary Structure Template ──
+// Groups components into a reusable salary structure
+model PayrollSalaryTemplate {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  name              String    // e.g., "Standard CTC Structure", "Contractor Structure"
+  description       String?
+  employeeType      String?   // "FULL_TIME", "CONTRACT", "HOURLY", "CONSULTANT", "FREELANCER"
+  isDefault         Boolean   @default(false)
+  isActive          Boolean   @default(true)
+  effectiveFrom     DateTime  @default(now())
+  effectiveTo       DateTime?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  components        PayrollTemplateComponent[]
+  assignments       PayrollEmployeeSalary[]
+
+  @@index([organizationId, isActive])
+}
+
+// ── Template ↔ Component Mapping ──
+// Which components are included in a salary template, with overrides
+model PayrollTemplateComponent {
+  id                String    @id @default(uuid())
+  templateId        String
+  componentCode     String    // References PayrollComponentMaster.code
+  overrideFormula   Json?     // Override formula for this template (null = use master)
+  isMandatory       Boolean   @default(true)
+  displayOrder      Int       @default(0)
+  isActive          Boolean   @default(true)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  template          PayrollSalaryTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([templateId, componentCode])
+}
+
+// ── Employee Salary Assignment ──
+// Assigns a salary structure + CTC to an employee (effective-date based for revisions)
+model PayrollEmployeeSalary {
+  id                String    @id @default(uuid())
+  employeeId        String
+  organizationId    String?
+  templateId        String
+  ctc               Float     // Annual CTC
+  basicSalary       Float     // Monthly Basic
+  grossSalary       Float     // Monthly Gross
+  componentValues   Json      // { "BASIC": 25000, "HRA": 12500, ... } — resolved values
+  effectiveFrom     DateTime
+  effectiveTo       DateTime?
+  revisionReason    String?   // "Joining", "Annual Revision", "Promotion"
+  revisionLetter    String?   // URL to revision letter
+  status            String    @default("Active") // Active, Superseded, Draft
+  approvedById      String?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  template          PayrollSalaryTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([organizationId])
+}
+
+// ── PF Configuration ──
+model PayrollPFConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  pfWageComponents    String[]  // ["BASIC", "DA"] — which components make PF wage
+  pfCeiling           Float     @default(15000)
+  employeePFRate      Float     @default(12)
+  employerPFRate      Float     @default(12)
+  epsRate             Float     @default(8.33)
+  adminChargeRate     Float     @default(0.5)
+  edliRate            Float     @default(0.5)
+  restrictToCeiling   Boolean   @default(true) // If false, PF on full wage (voluntary)
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── ESI Configuration ──
+model PayrollESIConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  grossThreshold      Float     @default(21000) // ESI applicable if gross <= threshold
+  employeeRate        Float     @default(0.75)
+  employerRate        Float     @default(3.25)
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Professional Tax Slab Configuration ──
+model PayrollPTSlabConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  state               String    // "Maharashtra", "Karnataka", etc.
+  slabFrom            Float     // Gross salary range start
+  slabTo              Float     // Gross salary range end (use 99999999 for no upper limit)
+  amount              Float     // PT amount for this slab
+  monthOverrides      Json?     // { "2": 300 } — February special for Maharashtra
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, state, isActive])
+}
+
+// ── LWF Configuration ──
+model PayrollLWFConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  state               String
+  employeeAmount      Float
+  employerAmount      Float
+  frequency           String    @default("HALF_YEARLY") // "MONTHLY", "HALF_YEARLY", "YEARLY"
+  applicableMonths    Int[]     // e.g., [6, 12] for half-yearly in June & December
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, state, isActive])
+}
+
+// ── Tax Slab Configuration (Old & New Regime) ──
+model PayrollTaxSlabConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  regime              String    // "OLD", "NEW"
+  financialYear       String    // "2025-26"
+  slabFrom            Float
+  slabTo              Float     // Use 99999999 for highest slab
+  rate                Float     // Tax rate percentage
+  surchargeThreshold  Float?    // Income above which surcharge applies
+  surchargeRate       Float     @default(0)
+  cessRate            Float     @default(4)  // Health & Education Cess
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, regime, financialYear, isActive])
+}
+
+// ── Tax Exemption Sections (80C, 80D, HRA, etc.) ──
+model PayrollTaxSectionConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  sectionCode         String    // "80C", "80D", "80CCD_1B", "80E", "80G", "HRA", "STANDARD_DEDUCTION"
+  name                String
+  maxLimit            Float     // Maximum deduction limit
+  applicableRegime    String    // "OLD", "NEW", "BOTH"
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, applicableRegime, isActive])
+}
+
+// ── Bonus Configuration ──
+model PayrollBonusConfig {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  bonusType           String    // "MONTHLY", "QUARTERLY", "YEARLY", "PERFORMANCE", "FESTIVAL"
+  name                String
+  calculationMethod   String    // "FLAT", "PERCENTAGE_BASIC", "PERCENTAGE_GROSS", "CUSTOM"
+  percentage          Float?
+  flatAmount          Float?
+  eligibleComponents  String[]  // Component codes that form eligible salary
+  isActive            Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now())
+  effectiveTo         DateTime?
+  createdById         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([organizationId, bonusType, isActive])
+}
+
+// ── Overtime Configuration ──
+model PayrollOTConfig {
+  id                    String    @id @default(uuid())
+  organizationId        String?
+  baseSalaryComponents  String[]  // Components to calculate hourly rate from
+  workingDaysPerMonth   Int       @default(26)
+  workingHoursPerDay    Float     @default(8)
+  otMultiplier          Float     @default(2)  // 2x for double OT
+  maxOTHoursPerMonth    Float?    // Cap on OT hours
+  isActive              Boolean   @default(true)
+  effectiveFrom         DateTime  @default(now())
+  effectiveTo           DateTime?
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Gratuity Configuration ──
+model PayrollGratuityConfig {
+  id                    String    @id @default(uuid())
+  organizationId        String?
+  minServiceYears       Int       @default(5)
+  daysPerYear           Int       @default(15)
+  divisor               Int       @default(26)
+  maxAmount             Float?    // Government cap
+  eligibleComponents    String[]  // ["BASIC", "DA"]
+  isActive              Boolean   @default(true)
+  effectiveFrom         DateTime  @default(now())
+  effectiveTo           DateTime?
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Rounding Configuration ──
+model PayrollRoundingConfig {
+  id                    String    @id @default(uuid())
+  organizationId        String?
+  componentType         String    // "SALARY", "PF", "ESI", "TAX", "NET_PAY", "GRATUITY"
+  roundingMethod        String    // "DECIMAL_2", "NEAREST_RUPEE", "FLOOR", "CEIL"
+  decimalPlaces         Int       @default(2)
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Payroll Calculation Audit Log ──
+// Stores EVERY formula execution for audit & dispute resolution
+model PayrollCalculationLog {
+  id                    String    @id @default(uuid())
+  organizationId        String?
+  employeeId            String
+  payrollMonth          Int
+  payrollYear           Int
+  payrollRunId          String?
+  stepNumber            Int       // Which step (1-14) in the calculation flow
+  stepName              String    // "LOAD_EMPLOYEE", "CALCULATE_EARNINGS", etc.
+  componentCode         String?   // Which component was calculated
+  formulaUsed           String    // Human-readable formula
+  inputValues           Json      // All inputs to this calculation
+  outputValue           Float?    // Result
+  outputData            Json?     // For complex outputs (breakdowns, etc.)
+  executionTimeMs       Int       // How long this step took
+  status                String    @default("SUCCESS") // "SUCCESS", "ERROR", "WARNING"
+  errorMessage          String?
+  calculatedById        String?
+  createdAt             DateTime  @default(now())
+
+  @@index([employeeId, payrollMonth, payrollYear])
+  @@index([payrollRunId])
+  @@index([organizationId, createdAt])
+}
+
+// ── Payroll Run V2 (Enhanced with workflow steps) ──
+model PayrollRunV2 {
+  id                    String    @id @default(uuid())
+  organizationId        String?
+  runCode               String    @unique // "PRUN-202506-0001"
+  month                 Int
+  year                  Int
+  financialYear         String?   // "2025-26"
+  status                String    @default("OPEN")
+  // Status flow: OPEN → ATTENDANCE_IMPORTED → LOP_CALCULATED → VARIABLE_INPUTS_DONE →
+  //              BONUS_APPLIED → REIMBURSEMENTS_APPLIED → LOAN_RECOVERY_DONE →
+  //              PREVIEW → MANAGER_APPROVAL → HR_APPROVAL → FINANCE_APPROVAL →
+  //              LOCKED → PAYSLIPS_GENERATED → BANK_FILE_GENERATED →
+  //              COMPLIANCE_DONE → CLOSED
+  currentStep           Int       @default(1)
+  totalEmployees        Int       @default(0)
+  processedEmployees    Int       @default(0)
+  errorEmployees        Int       @default(0)
+  totalGross            Float     @default(0)
+  totalDeductions       Float     @default(0)
+  totalNet              Float     @default(0)
+  bankFileUrl           String?
+  complianceReportUrl   String?
+  processedById         String?
+  lockedById            String?
+  lockedAt              DateTime?
+  closedAt              DateTime?
+  runLog                Json?     // Full audit trail
+  errorLog              Json?     // Errors during processing
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  employees             PayrollRunEmployee[]
+
+  @@unique([organizationId, month, year])
+  @@index([organizationId, status])
+}
+
+// ── Employee Record within a Payroll Run ──
+model PayrollRunEmployee {
+  id                    String    @id @default(uuid())
+  runId                 String
+  employeeId            String
+  salaryAssignmentId    String?
+  // Attendance
+  payrollDays           Float     @default(0)  // Total calendar/working days
+  presentDays           Float     @default(0)
+  lopDays               Float     @default(0)
+  payableDays           Float     @default(0)
+  weeklyOffs            Float     @default(0)
+  holidays              Float     @default(0)
+  paidLeaves            Float     @default(0)
+  unpaidLeaves          Float     @default(0)
+  halfDays              Float     @default(0)
+  // Financials
+  basicEarned           Float     @default(0)
+  grossEarnings         Float     @default(0)
+  totalEarnings         Float     @default(0)
+  totalStatutory        Float     @default(0)
+  totalTax              Float     @default(0)
+  totalOtherDeductions  Float     @default(0)
+  totalDeductions       Float     @default(0)
+  netSalary             Float     @default(0)
+  // Breakdowns
+  earningsBreakdown     Json?     // { "BASIC": 25000, "HRA": 12500, ... }
+  deductionsBreakdown   Json?     // { "PF": 1800, "ESI": 150, ... }
+  statutoryBreakdown    Json?     // { "PF_EMPLOYEE": 1800, "PF_EMPLOYER": 1800, "EPS": ... }
+  taxBreakdown          Json?     // { "projectedIncome": ..., "monthlyTDS": ... }
+  attendanceBreakdown   Json?     // Full attendance detail
+  // Bonus, Reimbursement, Loan, Arrear
+  bonusAmount           Float     @default(0)
+  overtimeAmount        Float     @default(0)
+  reimbursementAmount   Float     @default(0)
+  loanRecovery          Float     @default(0)
+  advanceRecovery       Float     @default(0)
+  arrearAmount          Float     @default(0)
+  leaveEncashment       Float     @default(0)
+  // Status
+  status                String    @default("PENDING") // PENDING, CALCULATED, VERIFIED, ERROR
+  errorMessage          String?
+  calculatedAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  run                   PayrollRunV2 @relation(fields: [runId], references: [id])
+
+  @@unique([runId, employeeId])
+  @@index([runId, status])
+}
+
+// ── Financial Year Configuration ──
+model PayrollFinancialYear {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  name              String    // e.g. "FY 2025-26"
+  startDate         DateTime
+  endDate           DateTime
+  status            String    @default("ACTIVE") // ACTIVE, LOCKED
+  isLocked          Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+// ── Payroll Workflow Configuration ──
+model PayrollWorkflowConfig {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  workflowType      String    // "PAYROLL_RUN", "LOAN", "REIMBURSEMENT", "BONUS", "FNF", "TAX_DECLARATION"
+  approvalLevels    Json      // Array of { level: 1, role: "MANAGER", autoApproveDays: 3 }
+  status            String    @default("ACTIVE") // ACTIVE, INACTIVE
+  effectiveFrom     DateTime  @default(now())
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  instances         PayrollWorkflowInstance[]
+
+  @@unique([organizationId, workflowType])
+}
+
+// ── Payroll Workflow Instance ──
+model PayrollWorkflowInstance {
+  id                String    @id @default(uuid())
+  workflowConfigId  String
+  entityType        String    // "PAYROLL_RUN", "LOAN", "REIMBURSEMENT", "BONUS", "FNF", "TAX_DECLARATION"
+  entityId          String    // ID of the referenced entity (e.g. loanApplicationId)
+  currentLevel      Int       @default(1)
+  currentStatus     String    @default("PENDING") // PENDING, APPROVED, REJECTED, ESCALATED
+  initiatedById     String
+  completedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  config            PayrollWorkflowConfig @relation(fields: [workflowConfigId], references: [id])
+  steps             PayrollWorkflowStep[]
+
+  @@index([entityType, entityId])
+}
+
+// ── Payroll Workflow Step ──
+model PayrollWorkflowStep {
+  id                String    @id @default(uuid())
+  instanceId        String
+  level             Int
+  assignedToRole    String    // "MANAGER", "HR", "FINANCE", "PAYROLL_MANAGER", "ADMIN"
+  assignedToId      String?   // If assigned to a specific user (e.g. employee's manager ID)
+  action            String    @default("PENDING") // PENDING, APPROVED, REJECTED, ESCALATED, AUTO_APPROVED
+  comments          String?
+  actionAt          DateTime?
+  autoApproveDeadline DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  instance          PayrollWorkflowInstance @relation(fields: [instanceId], references: [id])
+}
+
+// ── Payroll Query (Two-Way Communication) ──
+model PayrollQuery {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  employeeId        String
+  category          String    // "PAYSLIP", "TAX", "REIMBURSEMENT", "LOAN", "COMPLIANCE", "OTHER"
+  subject           String
+  description       String
+  month             Int?
+  year              Int?
+  status            String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority          String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  assignedToId      String?
+  resolvedAt        DateTime?
+  resolution        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  comments          PayrollQueryComment[]
+
+  @@index([employeeId, status])
+  @@index([organizationId])
+}
+
+// ── Payroll Query Comment ──
+model PayrollQueryComment {
+  id                String    @id @default(uuid())
+  queryId           String
+  commentById       String
+  commentByName     String
+  commentByRole     String    // "EMPLOYEE", "MANAGER", "HR", "FINANCE", "PAYROLL_MANAGER", "ADMIN"
+  message           String
+  attachmentUrl     String?
+  createdAt         DateTime  @default(now())
+
+  query             PayrollQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+}
+
+// ── Payroll Notification ──
+model PayrollNotification {
+  id                String    @id @default(uuid())
+  recipientId       String
+  recipientRole     String?
+  type              String    // "APPROVAL_REQUEST", "APPROVED", "REJECTED", "QUERY_UPDATE", "PAYSLIP_RELEASED"
+  title             String
+  message           String
+  entityType        String?
+  entityId          String?
+  isRead            Boolean   @default(false)
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+}
+
+// ── Payroll Audit Log ──
+model PayrollAuditLog {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  action            String    // "CREATE", "UPDATE", "DELETE", "APPROVE", "CALCULATE", "LOCK"
+  module            String    // "CONFIG", "SALARY", "RUN", "TAX", "LOAN", "REIMBURSEMENT"
+  entityType        String
+  entityId          String
+  oldValue          Json?
+  newValue          Json?
+  performedById     String
+  performedByName   String
+  performedByRole   String
+  ipAddress         String?
+  createdAt         DateTime  @default(now())
+}
+

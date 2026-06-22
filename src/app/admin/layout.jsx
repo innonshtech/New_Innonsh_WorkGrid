@@ -131,6 +131,11 @@ function DashboardLayoutContent({ children }) {
   const isActive = (href) => {
     if (!pathname) return false;
 
+    // Custom check for Workflow Payroll v2 default tab when no parameter is present
+    if (pathname === '/admin/payroll/v2' && !searchParams.get('tab')) {
+      if (href === '/admin/payroll/v2?tab=dashboard') return true;
+    }
+
     // Check if the link itself contains a query param (e.g., /ess?tab=timesheets)
     const hrefHasParams = href.includes('?');
     const [hrefPath, hrefQuery] = href.split('?');
@@ -211,6 +216,8 @@ function DashboardLayoutContent({ children }) {
           href: "/admin/attendance",
           icon: UserCheck,
         },
+
+
         {
           name: t("holidayManagement"),
           href: "/admin/holidays",
@@ -299,6 +306,21 @@ function DashboardLayoutContent({ children }) {
       ],
     },
     {
+      name: "Workflow Payroll",
+      href: "/admin/payroll/v2",
+      icon: CreditCard,
+      requiredPermissions: ['payroll.view', 'payroll.manage'],
+      children: [
+        { name: "Command Center", href: "/admin/payroll/v2?tab=dashboard", icon: Home },
+        { name: "Run Wizard", href: "/admin/payroll/v2?tab=payroll-run", icon: CreditCard },
+        { name: "Salary Structures", href: "/admin/payroll/v2?tab=salary-structures", icon: Users },
+        { name: "Queries Desk", href: "/admin/payroll/v2?tab=queries", icon: MessageSquare },
+        { name: "Workflow Approvals", href: "/admin/payroll/v2?tab=approvals", icon: CheckSquare },
+        { name: "Master Settings", href: "/admin/payroll/v2?tab=configs", icon: Settings2 },
+      ]
+    },
+    {
+
       name: t("projectTracking"),
       href: "/admin/tasks/projects",
       icon: Briefcase,

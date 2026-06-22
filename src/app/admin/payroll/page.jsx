@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { Users, FileText, Calculator, BarChart3, Gift } from 'lucide-react';
+import { Users, FileText, Calculator, BarChart3, Gift, CreditCard } from 'lucide-react';
+
 
 export const metadata = {
   title: 'Payroll Management | XperHR',
@@ -9,12 +10,21 @@ export const metadata = {
 export default function PayrollPage() {
   const features = [
     {
+      title: 'Workflow Payroll V2',
+      description: 'Run formula-driven calculations, track multi-level approvals, and resolve employee query threads',
+      icon: CreditCard,
+      href: '/admin/payroll/v2',
+      color: 'text-violet-600',
+      disabled: false
+    },
+    {
       title: 'Employee Management',
       description: 'Add, edit, and manage employee details and salary information',
       icon: Users,
       href: '/admin/employees',
       color: 'text-blue-600'
     },
+
     {
       title: 'Payslip Generation',
       description: 'Generate and manage employee payslips',

@@ -198,6 +198,8 @@ function DashboardLayoutContent({ children }) {
           href: "/admin/attendance",
           icon: UserCheck,
         },
+
+
         {
           name: t("holidayManagement"),
           href: "/admin/holidays",
@@ -281,6 +283,19 @@ function DashboardLayoutContent({ children }) {
       ],
     },
     {
+      name: "Workflow Payroll",
+      href: "/admin/payroll/v2",
+      icon: CreditCard,
+      children: [
+        { name: "Command Center", href: "/admin/payroll/v2?tab=dashboard", icon: Home },
+        { name: "Run Wizard", href: "/admin/payroll/v2?tab=payroll-run", icon: CreditCard },
+        { name: "Queries Desk", href: "/admin/payroll/v2?tab=queries", icon: MessageSquare },
+        { name: "Workflow Approvals", href: "/admin/payroll/v2?tab=approvals", icon: CheckSquare },
+        { name: "Master Settings", href: "/admin/payroll/v2?tab=configs", icon: Settings2 },
+      ]
+    },
+    {
+
       name: t("projectTracking"),
       href: "/admin/tasks/projects",
       icon: Briefcase,
@@ -349,6 +364,8 @@ function DashboardLayoutContent({ children }) {
     { name: t("myTimesheet"), href: "/employee/timesheets", icon: ListTodo },
     { name: "Assigned Projects", href: "/employee/projects", icon: Briefcase },
     { name: t("myPayslip"), href: "/employee/my-payslip", icon: Receipt },
+    { name: "My Payroll (New)", href: "/employee/payroll", icon: CreditCard },
+
     { name: t("myLoans"), href: "/employee/loans", icon: BanknoteArrowUp },
     { name: t("myAttendance"), href: "/employee/attendance", icon: UserCheck },
     { name: t("myHolidays") || "My Holidays", href: "/employee/holidays", icon: Calendar },
