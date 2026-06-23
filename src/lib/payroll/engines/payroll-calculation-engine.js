@@ -353,6 +353,10 @@ export class PayrollCalculationEngine {
       // Convert declarations to lookup map
       const declarationMap = {};
       for (const decl of declarations) {
+        // Enforce HR Approval Sync
+        const isApproved = ['Approved', 'Verified'].includes(decl.status) || decl.status === 'Active';
+        if (!isApproved) continue;
+        
         const data = decl.modelData || {};
         if (data.sectionCode && data.amount) {
           declarationMap[data.sectionCode] = (declarationMap[data.sectionCode] || 0) + Number(data.amount);
@@ -375,6 +379,15 @@ export class PayrollCalculationEngine {
             declarationMap['80CCD_1B'] = Number(sec.section80CCD_1B.total || 0);
           } else if (sec.nps !== undefined) {
             declarationMap['80CCD_1B'] = Number(sec.nps || 0);
+          }
+          if (sec.section80G && sec.section80G.total !== undefined) {
+            declarationMap['80G'] = Number(sec.section80G.total || 0);
+          }
+          if (sec.section80E && sec.section80E.total !== undefined) {
+            declarationMap['80E'] = Number(sec.section80E.total || 0);
+          }
+          if (sec.section24b && sec.section24b.total !== undefined) {
+            declarationMap['24B'] = Number(sec.section24b.total || 0);
           }
           if (sec.otherDeductions) {
             if (sec.otherDeductions.standardDeduction) {
@@ -808,8 +821,10 @@ export class PayrollCalculationEngine {
         result.netSalary
       );
 
-      // Flush all logs to database
-      await this.logger.flush();
+      // Flush all logs to database if not a preview
+      if (!overrides.isPreview) {
+        await this.logger.flush();
+      }
 
     } catch (error) {
       result.status = 'ERROR';
@@ -817,10 +832,12 @@ export class PayrollCalculationEngine {
 
       this.logger.logError(0, 'CALCULATION_FAILED', null, error);
 
-      try {
-        await this.logger.flush();
-      } catch (flushError) {
-        console.error('[PayrollEngine] Failed to flush error logs:', flushError.message);
+      if (!overrides.isPreview) {
+        try {
+          await this.logger.flush();
+        } catch (flushError) {
+          console.error('[PayrollEngine] Failed to flush error logs:', flushError.message);
+        }
       }
     }
 

@@ -173,6 +173,21 @@ export default function EmployeePayslipView() {
     setShowModal(true);
   };
 
+  const displayEarnings = useMemo(() => {
+    if (!selectedPayslip) return [];
+    return (Array.isArray(selectedPayslip.earnings)
+      ? selectedPayslip.earnings
+      : Object.entries(selectedPayslip.earnings || {}).map(([type, amount]) => ({ type, amount: Number(amount) }))
+    ).filter(e => e.type.toUpperCase() !== 'BASIC' && e.type.toUpperCase() !== 'BASIC SALARY');
+  }, [selectedPayslip]);
+
+  const displayDeductions = useMemo(() => {
+    if (!selectedPayslip) return [];
+    return Array.isArray(selectedPayslip.deductions)
+      ? selectedPayslip.deductions
+      : Object.entries(selectedPayslip.deductions || {}).map(([type, amount]) => ({ type, amount: Number(amount) }));
+  }, [selectedPayslip]);
+
   const handleDownloadPDF = async (slip) => {
     try {
       const jsPDF = (await import("jspdf/dist/jspdf.es.min.js")).default;
@@ -199,17 +214,32 @@ export default function EmployeePayslipView() {
       });
 
       // Breakdown Table preparation
-      const earnings = slip.earnings?.length ? slip.earnings : [{ type: 'Basic Salary', amount: slip.basicSalary }];
-      const deductions = slip.deductions || [];
+      const normEarnings = Array.isArray(slip.earnings)
+        ? slip.earnings
+        : Object.entries(slip.earnings || {}).map(([type, amount]) => ({ type, amount: Number(amount) }));
+
+      const normDeductions = Array.isArray(slip.deductions)
+        ? slip.deductions
+        : Object.entries(slip.deductions || {}).map(([type, amount]) => ({ type, amount: Number(amount) }));
+
+      const formattedEarnings = normEarnings.map(e => ({
+        type: e.type.toUpperCase() === 'BASIC' ? 'Basic Salary' : e.type,
+        amount: e.amount
+      }));
+
+      if (!formattedEarnings.some(e => e.type === 'Basic Salary')) {
+        formattedEarnings.unshift({ type: 'Basic Salary', amount: slip.basicSalary });
+      }
+
       const rows = [];
-      const len = Math.max(earnings.length, deductions.length);
+      const len = Math.max(formattedEarnings.length, normDeductions.length);
 
       for (let i = 0; i < len; i++) {
         rows.push([
-          earnings[i]?.type || '',
-          earnings[i]?.amount ? `Rs. ${earnings[i].amount.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })}` : '',
-          deductions[i]?.type || '',
-          deductions[i]?.amount ? `Rs. ${deductions[i].amount.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })}` : ''
+          formattedEarnings[i]?.type || '',
+          formattedEarnings[i]?.amount ? `Rs. ${formattedEarnings[i].amount.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })}` : '',
+          normDeductions[i]?.type || '',
+          normDeductions[i]?.amount ? `Rs. ${normDeductions[i].amount.toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })}` : ''
         ]);
       }
 
@@ -691,7 +721,7 @@ export default function EmployeePayslipView() {
                     </h5>
                     <div className="space-y-2">
                       <BreakdownLineItem label={t("basicSalary") || "Basic Salary"} value={selectedPayslip.basicSalary} />
-                      {selectedPayslip.earnings?.map((e, idx) => (
+                      {displayEarnings.map((e, idx) => (
                         <BreakdownLineItem key={idx} label={e.type} value={e.amount} />
                       ))}
                       <div className="pt-3 mt-3 border-t border-dashed border-slate-200 flex justify-between items-center font-black">
@@ -708,10 +738,10 @@ export default function EmployeePayslipView() {
                       {t("deductionsComponent") || "Deductions"}
                     </h5>
                     <div className="space-y-2">
-                      {selectedPayslip.deductions?.map((d, idx) => (
+                      {displayDeductions.map((d, idx) => (
                         <BreakdownLineItem key={idx} label={d.type} value={d.amount} isNegative />
                       ))}
-                      {selectedPayslip.deductions?.length === 0 && (
+                      {displayDeductions.length === 0 && (
                         <p className="text-[11px] text-slate-400 italic">{t("noDeductionsApplied") || "No Deductions Applied"}</p>
                       )}
                       <div className="pt-3 mt-3 border-t border-dashed border-slate-200 flex justify-between items-center font-black">

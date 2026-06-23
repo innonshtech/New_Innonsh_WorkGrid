@@ -664,7 +664,11 @@ export default function PayrollMasterPortal() {
           grossSalary: Number(selectedEmp.payslipStructure.grossSalary || 0),
           componentValues,
           payslipStructure: selectedEmp.payslipStructure,
-          revisionReason: 'Admin customized overrides'
+          revisionReason: 'Admin customized overrides',
+          pfApplicable: selectedEmp.pfApplicable,
+          esicApplicable: selectedEmp.esicApplicable,
+          isTDSApplicable: selectedEmp.isTDSApplicable,
+          gratuityApplicable: selectedEmp.gratuityApplicable
         })
       });
       
@@ -899,7 +903,7 @@ export default function PayrollMasterPortal() {
     if (!activeRun) return;
     setCalculating(true);
     try {
-      const data = await safeFetchJson(`/api/v1/admin/payroll/v2/runs/${activeRun.id}/calculate`, {
+      const data = await safeFetchJson(`/api/v1/admin/payroll/v2/runs/${activeRun.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({})
@@ -1436,13 +1440,23 @@ export default function PayrollMasterPortal() {
                         )}
 
                         {activeRun.status === 'PREVIEW' && (
-                          <button
-                            onClick={() => handleRunAction('SUBMIT_APPROVAL')}
-                            className="w-full flex items-center justify-center space-x-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm"
-                          >
-                            <Send className="h-4 w-4" />
-                            <span>Submit for Multi-level Approval</span>
-                          </button>
+                          <div className="space-y-2">
+                            <button
+                              onClick={() => handleRunAction('SUBMIT_APPROVAL')}
+                              className="w-full flex items-center justify-center space-x-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition-all shadow-sm"
+                            >
+                              <Send className="h-4 w-4" />
+                              <span>Submit for Multi-level Approval</span>
+                            </button>
+                            <button
+                              onClick={triggerCalculations}
+                              disabled={calculating}
+                              className="w-full flex items-center justify-center space-x-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 font-bold text-sm rounded-xl transition-all shadow-sm"
+                            >
+                              <RotateCw className={`h-4 w-4 ${calculating ? 'animate-spin' : ''}`} />
+                              <span>{calculating ? 'Recalculating...' : 'Recalculate Formulas'}</span>
+                            </button>
+                          </div>
                         )}
 
                         {(activeRun.status.includes('APPROVAL') || activeRun.status === 'FINANCE_APPROVAL') && (
@@ -2139,7 +2153,21 @@ export default function PayrollMasterPortal() {
                         <div className="flex justify-between items-center pb-2 border-b border-slate-100">
                           <h3 className="font-extrabold text-sm text-slate-800">Financial Year Tax settings</h3>
                           <div className="flex items-center space-x-2">
-                            <span className="text-[10px] font-bold text-slate-400">Regime:</span>
+                            <span className="text-[10px] font-bold text-slate-400">Status:</span>
+                            <select
+                              value={declarations.status || 'Active'}
+                              onChange={(e) => setDeclarations({ ...declarations, status: e.target.value })}
+                              className={`px-2.5 py-1 border rounded-lg text-xs font-bold outline-none ${
+                                declarations.status === 'Verified' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                declarations.status === 'Approved' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}
+                            >
+                              <option value="Active">Pending Verification</option>
+                              <option value="Verified">Verified & Applied</option>
+                              <option value="Rejected">Rejected</option>
+                            </select>
+                            <span className="text-[10px] font-bold text-slate-400 ml-3">Regime:</span>
                             <select
                               value={selectedEmp.taxRegime || 'new'}
                               onChange={(e) => setSelectedEmp({ ...selectedEmp, taxRegime: e.target.value })}
@@ -3095,6 +3123,21 @@ export default function PayrollMasterPortal() {
                             <span>OT / Bonus / Reimbursements:</span>
                             <span>₹{Number((activeDraftEmployee.overtimeAmount || 0) + (activeDraftEmployee.bonusAmount || 0) + (activeDraftEmployee.reimbursementAmount || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                           </div>
+                          {activeDraftEmployee.lopDays > 0 && (() => {
+                            const fullGross = activeDraftEmployee.grossEarnings 
+                              ? (activeDraftEmployee.grossEarnings / ((activeDraftEmployee.payableDays || 1) / (activeDraftEmployee.payrollDays || 30)))
+                              : 0;
+                            const lopAmount = Math.round(fullGross - (activeDraftEmployee.grossEarnings || 0));
+                            return lopAmount > 0 ? (
+                              <div className="flex justify-between pt-1 text-rose-500 font-bold bg-rose-50/50 -mx-1 px-2 py-1.5 rounded-lg">
+                                <span className="flex items-center gap-1">
+                                  <span className="inline-block w-1.5 h-1.5 bg-rose-400 rounded-full"></span>
+                                  Loss of Pay ({activeDraftEmployee.lopDays} day{activeDraftEmployee.lopDays > 1 ? 's' : ''}):
+                                </span>
+                                <span>-₹{lopAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                              </div>
+                            ) : null;
+                          })()}
                           <div className="flex justify-between pt-2 border-t border-slate-200 text-slate-900 font-black text-sm">
                             <span>Gross Earnings:</span>
                             <span>₹{Number(activeDraftEmployee.totalEarnings || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>

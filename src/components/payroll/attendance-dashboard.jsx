@@ -717,7 +717,7 @@ export default function AttendanceDashboard() {
         document.body.appendChild(link);
         link.click();
       } else if (format === 'pdf') {
-        const { jsPDF } = await import('jspdf');
+        const jsPDF = (await import('jspdf')).default;
         const autoTable = (await import('jspdf-autotable')).default;
         const doc = new jsPDF();
         doc.text("Attendance Report", 14, 15);

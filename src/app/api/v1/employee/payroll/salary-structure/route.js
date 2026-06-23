@@ -12,15 +12,21 @@ export async function GET(request) {
 
     // Resolve employee
     let employee = null;
-    if (authUser.employeeId) {
+    if (authUser.role === 'employee' || authUser.role === 'supervisor') {
       employee = await prisma.employee.findUnique({
-        where: { employeeId: authUser.employeeId }
+        where: { id: authUser.id }
       });
-    }
-    if (!employee) {
-      employee = await prisma.employee.findFirst({
-        where: { email: authUser.email }
-      });
+    } else {
+      if (authUser.employeeId) {
+        employee = await prisma.employee.findUnique({
+          where: { employeeId: authUser.employeeId }
+        });
+      }
+      if (!employee && authUser.email) {
+        employee = await prisma.employee.findFirst({
+          where: { email: authUser.email }
+        });
+      }
     }
 
     if (!employee) {

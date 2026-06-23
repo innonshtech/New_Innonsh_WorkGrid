@@ -63,17 +63,29 @@ export async function POST(request) {
       if (existing) {
         resolvedTemplateId = existing.templateId;
       } else {
-        const defaultTemp = await prisma.payrollSalaryTemplate.findFirst({
+        let defaultTemp = await prisma.payrollSalaryTemplate.findFirst({
           where: { organizationId: orgId, isActive: true, isDefault: true }
         }) || await prisma.payrollSalaryTemplate.findFirst({
           where: { organizationId: orgId, isActive: true }
         });
+        
+        if (!defaultTemp) {
+          defaultTemp = await prisma.payrollSalaryTemplate.create({
+            data: {
+              name: 'Standard Structure',
+              description: 'Auto-generated standard salary template',
+              organizationId: orgId,
+              isDefault: true,
+              isActive: true,
+            }
+          });
+        }
         resolvedTemplateId = defaultTemp?.id;
       }
     }
 
     if (!resolvedTemplateId) {
-      return NextResponse.json({ error: "No salary template found or specified. Please create a template first." }, { status: 400 });
+      return NextResponse.json({ error: "Failed to resolve or create a salary template." }, { status: 500 });
     }
 
     // Load the template and its components
@@ -234,12 +246,19 @@ export async function POST(request) {
       };
     }
 
-    // Also update the employee's payslipStructure for backward compatibility
+    // Also update the employee's payslipStructure and statutory fields for backward compatibility
+    const employeeDataToUpdate = {
+      payslipStructure: payslipStructureToSave
+    };
+
+    if (body.pfApplicable !== undefined) employeeDataToUpdate.pfApplicable = body.pfApplicable;
+    if (body.esicApplicable !== undefined) employeeDataToUpdate.esicApplicable = body.esicApplicable;
+    if (body.isTDSApplicable !== undefined) employeeDataToUpdate.isTDSApplicable = body.isTDSApplicable;
+    if (body.gratuityApplicable !== undefined) employeeDataToUpdate.gratuityApplicable = body.gratuityApplicable;
+
     await prisma.employee.update({
       where: { id: employeeId },
-      data: {
-        payslipStructure: payslipStructureToSave
-      }
+      data: employeeDataToUpdate
     });
 
     return NextResponse.json({ success: true, assignment }, { status: 201 });

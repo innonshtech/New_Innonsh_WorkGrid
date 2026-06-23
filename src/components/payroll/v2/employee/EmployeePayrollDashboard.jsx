@@ -160,8 +160,8 @@ export default function EmployeePayrollDashboard() {
     toast.loading('Generating secure PDF payslip...');
     try {
       // Lazy load jsPDF on client side for performance
-      const { jsPDF } = await import('jspdf');
-      await import('jspdf-autotable');
+      const jsPDF = (await import('jspdf')).default;
+      const autoTable = (await import('jspdf-autotable')).default;
       
       const doc = new jsPDF({ unit: 'mm', format: 'a4' });
       
@@ -194,7 +194,7 @@ export default function EmployeePayrollDashboard() {
         ['Gross Salary', `INR ${payslip.grossSalary.toFixed(2)}`, 'Net Salary', `INR ${payslip.netSalary.toFixed(2)}`]
       ];
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: 42,
         margin: { left: 14, right: 14 },
         theme: 'plain',
@@ -215,7 +215,7 @@ export default function EmployeePayrollDashboard() {
         tableData.push([earnings[i][0], earnings[i][1], deductions[i][0], deductions[i][1]]);
       }
 
-      doc.autoTable({
+      autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 5,
         margin: { left: 14, right: 14 },
         head: [['Earnings', 'Amount', 'Deductions', 'Amount']],
@@ -236,6 +236,7 @@ export default function EmployeePayrollDashboard() {
       toast.dismiss();
       toast.success('Payslip downloaded successfully');
     } catch (err) {
+      console.error('PDF Generation Error:', err);
       toast.dismiss();
       toast.error('Failed to compile PDF');
     }
@@ -356,7 +357,7 @@ export default function EmployeePayrollDashboard() {
     }
     setSubmitLoading(true);
     try {
-      await safeFetchJson('/api/v1/admin/payroll/investments', {
+      const data = await safeFetchJson('/api/v1/admin/payroll/investments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -368,18 +369,205 @@ export default function EmployeePayrollDashboard() {
             section80D: { total: parseFloat(declarationAmounts['80D']) || 0 },
             hra: { annualRent: parseFloat(declarationAmounts['HRA']) || 0 },
             section80CCD_1B: parseFloat(declarationAmounts['80CCD_1B']) || 0,
-            nps: parseFloat(declarationAmounts['80CCD_1B']) || 0
+            nps: parseFloat(declarationAmounts['80CCD_1B']) || 0,
+            section80G: { total: parseFloat(declarationAmounts['80G']) || 0 },
+            section80E: { total: parseFloat(declarationAmounts['80E']) || 0 },
+            section24b: { total: parseFloat(declarationAmounts['24B']) || 0 }
           },
           submit: true
         })
       });
-      toast.success('Tax regime and investment declaration updated successfully');
-      // Refresh data after successful submission
-      fetchMyTaxPreview(user.id);
+      if (data && data.id) {
+        toast.success('Tax declaration submitted successfully for HR review!');
+        setExpandedTaxInspector(false);
+        fetchMyTaxPreview(user.id);
+      }
     } catch (err) {
-      toast.error(err.message || 'Failed to submit tax declaration');
+      console.error('Submission failed:', err);
+      toast.error('Failed to submit declaration.');
     } finally {
       setSubmitLoading(false);
+    }
+  };
+
+  const downloadForm16 = async () => {
+    if (!user?.id) return;
+    const toastId = toast.loading('Generating Form 16 PDF...');
+    try {
+      const data = await safeFetchJson(`/api/v1/admin/payroll/form16?employeeId=${user.id}`);
+      if (data && data.success) {
+        const form16 = data.data;
+
+        // Lazy load jsPDF on client side for performance
+        const jsPDF = (await import('jspdf')).default;
+        const autoTable = (await import('jspdf-autotable')).default;
+        
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const W = doc.internal.pageSize.getWidth();
+        const H = doc.internal.pageSize.getHeight();
+
+        const PRIMARY = [30, 64, 175];
+        const TEXT = [30, 30, 30];
+        const BORDER = [220, 220, 220];
+
+        // --- PAGE 1: PART A ---
+        // Outer border
+        doc.setDrawColor(...BORDER);
+        doc.rect(10, 10, W - 20, H - 20);
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(...PRIMARY);
+        doc.text('FORM NO. 16', W / 2, 20, { align: 'center' });
+
+        doc.setFontSize(10);
+        doc.setFont('Helvetica', 'normal');
+        doc.setTextColor(100, 116, 139);
+        doc.text('[See rule 31(1)(a)]', W / 2, 25, { align: 'center' });
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(...TEXT);
+        doc.text('Certificate of Tax Deducted at Source on Salary (Part A)', W / 2, 32, { align: 'center' });
+        doc.line(15, 36, W - 15, 36);
+
+        // Grid details
+        const infoRows = [
+          ['Employer Name', form16.employer?.name || '', 'Employee Name', form16.employee?.name || ''],
+          ['Employer TAN', form16.employer?.tan || '', 'Employee PAN', form16.employee?.pan || ''],
+          ['Employer PAN', form16.employer?.pan || '', 'Employee ID', form16.employee?.employeeId || ''],
+          ['Employer Address', form16.employer?.address || '', 'Designation', form16.employee?.designation || '']
+        ];
+
+        autoTable(doc, {
+          startY: 42,
+          margin: { left: 15, right: 15 },
+          head: [['Employer Details', '', 'Employee Details', '']],
+          body: infoRows,
+          theme: 'grid',
+          headStyles: { fillColor: [79, 70, 229] },
+          styles: { fontSize: 9 }
+        });
+
+        // Financial & Assessment Year Table
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 8,
+          margin: { left: 15, right: 15 },
+          head: [['Financial Year', 'Assessment Year', 'Tax Regime']],
+          body: [
+            [form16.financialYear, form16.assessmentYear, form16.partB?.regime?.toUpperCase() || 'NEW']
+          ],
+          theme: 'grid',
+          headStyles: { fillColor: [100, 116, 139] },
+          styles: { fontSize: 10, halign: 'center' }
+        });
+
+        // Part A Quarterly summary
+        const qSummary = form16.partA?.quarterlySummary || {};
+        const qRows = [
+          ['Quarter 1 (Apr - Jun)', `Rs. ${(qSummary.Q1?.gross || 0).toLocaleString('en-IN')}`, `Rs. ${(qSummary.Q1?.tds || 0).toLocaleString('en-IN')}`],
+          ['Quarter 2 (Jul - Sep)', `Rs. ${(qSummary.Q2?.gross || 0).toLocaleString('en-IN')}`, `Rs. ${(qSummary.Q2?.tds || 0).toLocaleString('en-IN')}`],
+          ['Quarter 3 (Oct - Dec)', `Rs. ${(qSummary.Q3?.gross || 0).toLocaleString('en-IN')}`, `Rs. ${(qSummary.Q3?.tds || 0).toLocaleString('en-IN')}`],
+          ['Quarter 4 (Jan - Mar)', `Rs. ${(qSummary.Q4?.gross || 0).toLocaleString('en-IN')}`, `Rs. ${(qSummary.Q4?.tds || 0).toLocaleString('en-IN')}`],
+          ['Total YTD', `Rs. ${(form16.partB?.grossSalary || 0).toLocaleString('en-IN')}`, `Rs. ${(form16.partA?.totalTDS || 0).toLocaleString('en-IN')}`]
+        ];
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(11);
+        doc.text('Quarterly Summary of TDS Deposited with Central Government', 15, doc.lastAutoTable.finalY + 12);
+
+        autoTable(doc, {
+          startY: doc.lastAutoTable.finalY + 16,
+          margin: { left: 15, right: 15 },
+          head: [['Quarter Period', 'Gross Salary Paid', 'Amount of TDS Deducted & Deposited']],
+          body: qRows,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] },
+          styles: { fontSize: 9 },
+          columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' } }
+        });
+
+        // Verification note
+        const noteY = doc.lastAutoTable.finalY + 15;
+        doc.setFont('Helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(80, 80, 80);
+        doc.text(`Certified that a sum of Rs. ${(form16.partA?.totalTDS || 0).toLocaleString('en-IN')} has been deducted and deposited to the credit of Central Government.`, 15, noteY);
+        doc.text('This is a digitally generated Form 16 certificate and does not require a physical signature.', 15, noteY + 5);
+
+        // --- PAGE 2: PART B ---
+        doc.addPage();
+        doc.setDrawColor(...BORDER);
+        doc.rect(10, 10, W - 20, H - 20);
+
+        doc.setFont('Helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(...PRIMARY);
+        doc.text('FORM NO. 16', W / 2, 20, { align: 'center' });
+
+        doc.setFontSize(11);
+        doc.setTextColor(...TEXT);
+        doc.text('PART B: Annexure - Details of Salary Paid and Deductions', W / 2, 28, { align: 'center' });
+        doc.line(15, 32, W - 15, 32);
+
+        // Part B Breakdown Rows
+        const partB = form16.partB || {};
+        const chVia = partB.chapterVIA || {};
+
+        const bRows = [];
+        bRows.push(['1. Gross Salary', `Rs. ${(partB.grossSalary || 0).toLocaleString('en-IN')}`, '']);
+        bRows.push(['2. Deductions under Section 16', '', '']);
+        bRows.push(['   a. Standard Deduction', '', `Rs. ${(partB.lessSection16?.standardDeduction || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['   b. Professional Tax (PT)', '', `Rs. ${(partB.lessSection16?.professionalTax || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['   Total Section 16 Deductions', '', `Rs. ${(partB.lessSection16?.total || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['3. Balance Income (Gross less Sec 16)', `Rs. ${(partB.balanceIncome || 0).toLocaleString('en-IN')}`, '']);
+
+        // Chapter VI-A Deductions
+        bRows.push(['4. Deductions under Chapter VI-A', '', '']);
+        Object.entries(chVia).forEach(([sectionCode, item]) => {
+          bRows.push([`   - Section ${sectionCode}`, `Declared: Rs. ${(item.declared || 0).toLocaleString('en-IN')}`, `Allowed: Rs. ${(item.allowed || 0).toLocaleString('en-IN')}`]);
+        });
+
+        // Totals & Liabilities
+        bRows.push(['5. Total Taxable Income', '', `Rs. ${(partB.totalTaxableIncome || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['6. Tax Computed on Total Income', '', `Rs. ${(partB.taxOnIncome || 0).toLocaleString('en-IN')}`]);
+        if (partB.surcharge > 0) {
+          bRows.push(['7. Surcharge', '', `Rs. ${(partB.surcharge || 0).toLocaleString('en-IN')}`]);
+        }
+        bRows.push(['8. Health and Education Cess (4%)', '', `Rs. ${(partB.cess || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['9. Total Tax Liability', '', `Rs. ${(partB.totalTaxLiability || 0).toLocaleString('en-IN')}`]);
+        bRows.push(['10. Year-to-Date TDS Deducted', '', `Rs. ${(partB.taxDeductedYTD || 0).toLocaleString('en-IN')}`]);
+
+        if (partB.taxRefundDue > 0) {
+          bRows.push(['11. Tax Refund Due', '', `Rs. ${(partB.taxRefundDue || 0).toLocaleString('en-IN')}`]);
+        } else if (partB.taxShortfall > 0) {
+          bRows.push(['11. Tax Shortfall / Balance Due', '', `Rs. ${(partB.taxShortfall || 0).toLocaleString('en-IN')}`]);
+        } else {
+          bRows.push(['11. Balance Due / Refund', '', 'Rs. 0']);
+        }
+
+        autoTable(doc, {
+          startY: 38,
+          margin: { left: 15, right: 15 },
+          head: [['Particulars', 'Detail / Computation', 'Amount']],
+          body: bRows,
+          theme: 'striped',
+          headStyles: { fillColor: [79, 70, 229] },
+          styles: { fontSize: 8.5 },
+          columnStyles: { 2: { halign: 'right', fontStyle: 'bold' } }
+        });
+
+        doc.save(`Form16_${user.id}_2026-27.pdf`);
+        toast.dismiss(toastId);
+        toast.success('Form 16 PDF downloaded successfully!');
+      } else {
+        toast.dismiss(toastId);
+        toast.error('Failed to generate Form 16.');
+      }
+    } catch (err) {
+      console.error('Form 16 PDF Generation Error:', err);
+      toast.dismiss(toastId);
+      toast.error('Error generating Form 16 PDF.');
     }
   };
 
@@ -658,7 +846,7 @@ export default function EmployeePayrollDashboard() {
                     <div className="space-y-4">
                       <h4 className="font-extrabold text-sm text-slate-800">Chapter VI-A Deductions</h4>
                       
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                         <div className="space-y-1 bg-slate-50 p-4 rounded-xl border border-slate-100">
                           <label className="text-[10px] font-bold text-slate-550 uppercase">Section 80C (Max ₹1.5L)</label>
                           <input
@@ -699,6 +887,36 @@ export default function EmployeePayrollDashboard() {
                             className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-bold"
                           />
                         </div>
+                        <div className="space-y-1 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <label className="text-[10px] font-bold text-slate-555 uppercase">Section 80G Donations</label>
+                          <input
+                            type="number"
+                            placeholder="Charitable donations"
+                            value={declarationAmounts['80G']}
+                            onChange={(e) => setDeclarationAmounts({ ...declarationAmounts, '80G': e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <label className="text-[10px] font-bold text-slate-555 uppercase">Section 80E Edu Loan</label>
+                          <input
+                            type="number"
+                            placeholder="Interest on education loan"
+                            value={declarationAmounts['80E']}
+                            onChange={(e) => setDeclarationAmounts({ ...declarationAmounts, '80E': e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                          <label className="text-[10px] font-bold text-slate-555 uppercase">Section 24(b) Home Loan</label>
+                          <input
+                            type="number"
+                            placeholder="Interest on home loan"
+                            value={declarationAmounts['24B']}
+                            onChange={(e) => setDeclarationAmounts({ ...declarationAmounts, '24B': e.target.value })}
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 transition-all font-bold"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
@@ -708,6 +926,13 @@ export default function EmployeePayrollDashboard() {
                     className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-indigo-600/10"
                   >
                     Submit Declaration for HR Review
+                  </button>
+                  <button
+                    type="button"
+                    onClick={downloadForm16}
+                    className="w-full py-3 bg-white border border-indigo-200 text-indigo-600 hover:bg-indigo-50 font-bold text-xs rounded-xl transition-all mt-3"
+                  >
+                    ⬇ Download Form 16
                   </button>
                 </form>
               </div>

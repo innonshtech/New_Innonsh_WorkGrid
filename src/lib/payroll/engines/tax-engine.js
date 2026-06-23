@@ -77,6 +77,14 @@ export class TaxEngine {
       slabBreakdown: [],
     };
 
+    // ── Step 1: Project Annual Income ──
+    // Past + Current + Future
+    const pastIncome = ytdGross;
+    const currentIncome = monthlyGross;
+    const futureIncome = monthlyGross * (remainingMonths - 1); // -1 because current month is included
+    const projectedAnnual = pastIncome + currentIncome + futureIncome;
+    result.projectedAnnualIncome = this.roundingEngine.salary(projectedAnnual);
+
     if (!taxSlabs || taxSlabs.length === 0) {
       if (this.logger) {
         this.logger.log(11, 'CALCULATE_TAX', 'TDS',
@@ -85,14 +93,6 @@ export class TaxEngine {
       }
       return result;
     }
-
-    // ── Step 1: Project Annual Income ──
-    // Past + Current + Future
-    const pastIncome = ytdGross;
-    const currentIncome = monthlyGross;
-    const futureIncome = monthlyGross * (remainingMonths - 1); // -1 because current month is included
-    const projectedAnnual = pastIncome + currentIncome + futureIncome;
-    result.projectedAnnualIncome = this.roundingEngine.salary(projectedAnnual);
 
     // ── Step 2: Calculate Exemptions ──
     let totalExemptions = 0;
@@ -132,7 +132,10 @@ export class TaxEngine {
           // Already calculated dynamically above
           continue;
         }
-        const declared = Number(declarations[section.sectionCode] || 0);
+        const defaultValue = section.sectionCode === 'STANDARD_DEDUCTION' ? section.maxLimit : 0;
+        const declared = declarations[section.sectionCode] !== undefined 
+          ? Number(declarations[section.sectionCode]) 
+          : defaultValue;
         const allowed = Math.min(declared, section.maxLimit);
         if (allowed > 0) {
           exemptionBreakdown[section.sectionCode] = {
@@ -197,6 +200,31 @@ export class TaxEngine {
 
     result.projectedAnnualTax = this.roundingEngine.tax(totalTax);
     result.slabBreakdown = slabBreakdown;
+
+    // ── Step 4B: Section 87A Rebate & Marginal Relief ──
+    let rebateAmount = 0;
+    
+    // Rebate Limits for FY 2026-27 (New Regime: 12L, Old Regime: 5L)
+    const isNewRegime = regime.toUpperCase() === 'NEW';
+    const rebateThreshold = isNewRegime ? 1200000 : 500000;
+    
+    if (taxableIncome <= rebateThreshold) {
+      // Full Rebate
+      rebateAmount = totalTax;
+      totalTax = 0;
+    } else {
+      // Marginal Relief Check
+      // If the tax causes their take-home to be less than what it would be at the threshold, 
+      // cap the tax at the income exceeding the threshold.
+      const incomeExceedingThreshold = taxableIncome - rebateThreshold;
+      if (totalTax > incomeExceedingThreshold) {
+        rebateAmount = totalTax - incomeExceedingThreshold;
+        totalTax = incomeExceedingThreshold;
+      }
+    }
+    
+    result.rebate87A = this.roundingEngine.tax(rebateAmount);
+    result.taxAfterRebate = this.roundingEngine.tax(totalTax);
 
     // ── Step 5: Surcharge ──
     let surcharge = 0;

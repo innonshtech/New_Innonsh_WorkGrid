@@ -43,7 +43,7 @@ export async function POST(request) {
       year: Number(year),
       organizationId: employee.organizationId,
       calculatedById: authUser.id,
-      overrides
+      overrides: { ...overrides, isPreview: true }
     });
 
     // Also load calculation logs from the logger in memory

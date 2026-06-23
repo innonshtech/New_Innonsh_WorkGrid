@@ -255,10 +255,11 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadTaxSlabs(regime, financialYear) {
+    console.log(`loadTaxSlabs called with: regime=${regime}, financialYear=${financialYear}`);
     const slabs = await prisma.payrollTaxSlabConfig.findMany({
       where: {
         isActive: true,
-        regime: regime,
+        regime: regime.toLowerCase(),
         financialYear: financialYear,
         effectiveFrom: { lte: this.effectiveDate },
         OR: [
@@ -268,7 +269,7 @@ export class ConfigLoader {
       },
       orderBy: { slabFrom: 'asc' },
     });
-
+    console.log(`loadTaxSlabs returned ${slabs.length} slabs`);
     return slabs;
   }
 
@@ -281,7 +282,7 @@ export class ConfigLoader {
       where: {
         isActive: true,
         effectiveFrom: { lte: this.effectiveDate },
-        applicableRegime: { in: [regime, 'BOTH'] },
+        applicableRegime: { in: [regime, regime.toLowerCase(), 'BOTH'] },
         OR: [
           { organizationId: this.organizationId },
           { organizationId: null },
@@ -469,7 +470,7 @@ export class ConfigLoader {
     return prisma.investmentDeclaration.findMany({
       where: {
         employeeId,
-        status: { in: ['Active', 'Pending'] },
+        status: { in: ['Active', 'Pending', 'Approved', 'Verified'] },
       },
     });
   }

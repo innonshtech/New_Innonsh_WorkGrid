@@ -218,15 +218,19 @@ export async function POST(request) {
             });
         }
 
-        // Calculate totals for 80C and 80D
+        // Calculate totals for 80C and 80D only if sub-fields exist, otherwise trust the total
         if (sections) {
             if (sections.section80C) {
                 const s = sections.section80C;
-                sections.section80C.total = (s.ppf || 0) + (s.elss || 0) + (s.lic || 0) + (s.nsc || 0) + (s.others || 0);
+                if (s.ppf !== undefined || s.elss !== undefined || s.lic !== undefined) {
+                    sections.section80C.total = (s.ppf || 0) + (s.elss || 0) + (s.lic || 0) + (s.nsc || 0) + (s.others || 0);
+                }
             }
             if (sections.section80D) {
                 const s = sections.section80D;
-                sections.section80D.total = (s.mediclaimSelf || 0) + (s.mediclaimParents || 0);
+                if (s.mediclaimSelf !== undefined || s.mediclaimParents !== undefined) {
+                    sections.section80D.total = (s.mediclaimSelf || 0) + (s.mediclaimParents || 0);
+                }
             }
         }
 
