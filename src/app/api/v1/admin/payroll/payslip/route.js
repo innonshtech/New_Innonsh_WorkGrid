@@ -28,8 +28,8 @@ export async function GET(request) {
       filter.organizationId = authUser.organizationId;
     } else if (authUser.role === "employee") {
       filter.employeeId = authUser.id;
-      // Keka Parity: Employees only see Published payslips
-      if (!status) filter.status = "Published"; 
+      // Keka Parity: Employees only see Published payslips (or Released payslips from V2 run process)
+      if (!status) filter.status = { in: ["Published", "Released"] }; 
     } else if (authUser.role === "super_admin" && (employeeId || employee)) {
        filter.employeeId = employeeId || employee;
     }

@@ -113,6 +113,19 @@ export async function GET(request) {
             }
         }
 
+        // Fetch employee details including taxRegime
+        let emp = null;
+        const targetEmpId = employeeId || (prismaFilter.employeeId && typeof prismaFilter.employeeId === 'string' ? prismaFilter.employeeId : null);
+        if (targetEmpId) {
+            const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetEmpId);
+            if (isUuid) {
+                emp = await prisma.employee.findUnique({
+                    where: { id: targetEmpId },
+                    select: { id: true, mongoId: true, employeeId: true, firstName: true, lastName: true, email: true, phone: true, taxRegime: true }
+                });
+            }
+        }
+
         if (!declarationData && employeeId) {
             // Create a default empty declaration if not found
             const emptyObj = {
@@ -121,6 +134,7 @@ export async function GET(request) {
                 employeeId,
                 financialYear,
                 status: 'Draft',
+                taxRegime: emp?.taxRegime || 'new',
                 sections: {
                     section80C: { ppf: 0, elss: 0, lic: 0, nsc: 0, others: 0, total: 0 },
                     section80D: { mediclaimSelf: 0, mediclaimParents: 0, total: 0 },
@@ -133,11 +147,12 @@ export async function GET(request) {
 
         if (declarationData) {
             const data = declarationData.modelData && typeof declarationData.modelData === 'object' ? declarationData.modelData : {};
-            // Fetch single employee details for the returned declaration
-            const emp = await prisma.employee.findUnique({
-                where: { id: declarationData.employeeId },
-                select: { id: true, mongoId: true, employeeId: true, firstName: true, lastName: true, email: true, phone: true }
-            });
+            if (!emp) {
+                emp = await prisma.employee.findUnique({
+                    where: { id: declarationData.employeeId },
+                    select: { id: true, mongoId: true, employeeId: true, firstName: true, lastName: true, email: true, phone: true, taxRegime: true }
+                });
+            }
             const empObj = emp ? {
                 _id: emp.id,
                 id: emp.id,
@@ -157,6 +172,7 @@ export async function GET(request) {
                 status: declarationData.status,
                 createdAt: declarationData.createdAt,
                 updatedAt: declarationData.updatedAt,
+                taxRegime: emp?.taxRegime || 'new',
                 ...data
             });
         }
@@ -173,7 +189,8 @@ export async function POST(request) {
         const authUser = await getAuthUser();
         
         const body = await request.json();
-        const { employeeId, financialYear, sections, actualSubmissions, status, remark } = body;
+        const { employeeId, financialYear, sections, actualSubmissions, status, remark, regime, taxRegime } = body;
+        const selectedRegime = regime || taxRegime;
 
         if (!employeeId || !financialYear) {
             return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -194,15 +211,26 @@ export async function POST(request) {
             return NextResponse.json({ error: "Forbidden: You can only submit your own declaration" }, { status: 403 });
         }
 
-        // Calculate totals for 80C and 80D
+        if (selectedRegime) {
+            await prisma.employee.update({
+                where: { id: employee.id },
+                data: { taxRegime: selectedRegime.toLowerCase() }
+            });
+        }
+
+        // Calculate totals for 80C and 80D only if sub-fields exist, otherwise trust the total
         if (sections) {
             if (sections.section80C) {
                 const s = sections.section80C;
-                sections.section80C.total = (s.ppf || 0) + (s.elss || 0) + (s.lic || 0) + (s.nsc || 0) + (s.others || 0);
+                if (s.ppf !== undefined || s.elss !== undefined || s.lic !== undefined) {
+                    sections.section80C.total = (s.ppf || 0) + (s.elss || 0) + (s.lic || 0) + (s.nsc || 0) + (s.others || 0);
+                }
             }
             if (sections.section80D) {
                 const s = sections.section80D;
-                sections.section80D.total = (s.mediclaimSelf || 0) + (s.mediclaimParents || 0);
+                if (s.mediclaimSelf !== undefined || s.mediclaimParents !== undefined) {
+                    sections.section80D.total = (s.mediclaimSelf || 0) + (s.mediclaimParents || 0);
+                }
             }
         }
 

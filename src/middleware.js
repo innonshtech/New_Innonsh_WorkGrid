@@ -38,7 +38,9 @@ const protectedRoutes = [
   { path: '/api/v1/admin/payroll/leave-applications', roles: ['admin', 'super_admin', 'employee'], isApi: true },
   { path: '/api/v1/admin/payroll/overtime', roles: ['admin', 'super_admin', 'employee'], isApi: true },
   { path: '/api/v1/admin/payroll/comp-off', roles: ['admin', 'super_admin', 'employee'], isApi: true },
-  
+  { path: '/api/v1/admin/payroll/v2/calculate-preview', roles: ['admin', 'super_admin', 'employee'], isApi: true },
+  { path: '/api/v1/admin/payroll/form16', roles: ['admin', 'super_admin', 'employee'], isApi: true },
+  { path: '/api/v1/admin/payroll/investments', roles: ['admin', 'super_admin', 'employee'], isApi: true },
   { path: '/api/v1/admin/finance/expenses', roles: ['admin', 'super_admin', 'employee'], isApi: true },
   { path: '/api/v1/admin/finance/cost-centers', roles: ['admin', 'super_admin', 'employee'], isApi: true },
   { path: '/api/v1/admin/crm/business-units', roles: ['admin', 'super_admin', 'employee'], isApi: true },

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Download,
   ArrowLeft,
@@ -28,6 +28,21 @@ export default function PayslipView({ payslipId }) {
   const [payslip, setPayslip] = useState(null);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  const normEarnings = useMemo(() => {
+    if (!payslip) return [];
+    return (Array.isArray(payslip.earnings)
+      ? payslip.earnings
+      : Object.entries(payslip.earnings || {}).map(([type, amount]) => ({ type, amount: Number(amount) }))
+    ).filter(e => e.type.toUpperCase() !== 'BASIC' && e.type.toUpperCase() !== 'BASIC SALARY');
+  }, [payslip]);
+
+  const normDeductions = useMemo(() => {
+    if (!payslip) return [];
+    return Array.isArray(payslip.deductions)
+      ? payslip.deductions
+      : Object.entries(payslip.deductions || {}).map(([type, amount]) => ({ type, amount: Number(amount) }));
+  }, [payslip]);
 
   useEffect(() => {
     if (payslipId) {
@@ -158,7 +173,12 @@ export default function PayslipView({ payslipId }) {
       }
 
       // Add other earnings
-      (payslip.earnings || []).forEach(e => {
+      const pdfNormEarnings = (Array.isArray(payslip.earnings)
+        ? payslip.earnings
+        : Object.entries(payslip.earnings || {}).map(([type, amount]) => ({ type, amount: Number(amount) }))
+      ).filter(e => e.type.toUpperCase() !== 'BASIC' && e.type.toUpperCase() !== 'BASIC SALARY');
+
+      pdfNormEarnings.forEach(e => {
         earningsList.push({ name: e.type || e.name || "Allowance", amount: e.amount });
       });
       // Add Overtime
@@ -167,7 +187,11 @@ export default function PayslipView({ payslipId }) {
       }
 
       // Add Deductions
-      (payslip.deductions || []).forEach(d => {
+      const pdfNormDeductions = Array.isArray(payslip.deductions)
+        ? payslip.deductions
+        : Object.entries(payslip.deductions || {}).map(([type, amount]) => ({ type, amount: Number(amount) }));
+
+      pdfNormDeductions.forEach(d => {
         deductionsList.push({ name: d.type || d.name || "Deduction", amount: d.amount });
       });
 
@@ -189,10 +213,10 @@ export default function PayslipView({ payslipId }) {
       // Calculate accurate Total Earnings for PDF
       const pdfTotalEarnings = payslip.salaryType === "perday"
         ? ((payslip.basicSalary || 0) * (payslip.presentDays || 0)) + (payslip.overtimeAmount || 0)
-        : (payslip.basicSalary || 0) + (payslip.earnings || []).reduce((sum, e) => sum + (e.amount || 0), 0) + (payslip.overtimeAmount || 0);
+        : (payslip.basicSalary || 0) + pdfNormEarnings.reduce((sum, e) => sum + (e.amount || 0), 0) + (payslip.overtimeAmount || 0);
 
       // Calculate accurate Total Deductions for PDF (Sum of list)
-      const pdfTotalDeductions = (payslip.deductions || []).reduce((sum, d) => sum + (d.amount || 0), 0);
+      const pdfTotalDeductions = pdfNormDeductions.reduce((sum, d) => sum + (d.amount || 0), 0);
 
       // Add Total Row
       tableRows.push([
@@ -425,7 +449,7 @@ export default function PayslipView({ payslipId }) {
 
   // Calculate accurate Total Earnings (Basic + Allowances + Overtime)
   const calculatedTotalEarnings = (payslip.basicSalary || 0) +
-    (payslip.earnings || []).reduce((sum, e) => sum + (e.amount || 0), 0) +
+    normEarnings.reduce((sum, e) => sum + (e.amount || 0), 0) +
     (payslip.overtimeAmount || 0);
 
   // If salary type is per day, basic salary is calculated differently in the list but the sum should be consistent
@@ -607,7 +631,7 @@ export default function PayslipView({ payslipId }) {
                       </span>
                     </div>
                   )}
-                  {payslip.earnings?.map((earning, index) => (
+                  {normEarnings.map((earning, index) => (
                     <div key={index} className="flex justify-between items-center">
                       <span className="text-slate-600">{earning.type || "Unknown"}</span>
                       <span className="font-medium text-slate-900">{formatCurrency(earning.amount)}</span>
@@ -630,8 +654,8 @@ export default function PayslipView({ payslipId }) {
               <div className="bg-white rounded-lg p-4 border border-slate-200">
                 <h4 className="font-semibold text-slate-800 mb-3">Deductions</h4>
                 <div className="space-y-2">
-                  {payslip.deductions?.length ? (
-                    payslip.deductions.map((deduction, index) => (
+                  {normDeductions.length ? (
+                    normDeductions.map((deduction, index) => (
                       <div key={index} className="flex justify-between items-center">
                         <span className="text-slate-600">{deduction.type || "Unknown"}</span>
                         <span className="font-medium text-slate-900">-{formatCurrency(deduction.amount)}</span>
@@ -647,7 +671,7 @@ export default function PayslipView({ payslipId }) {
                     <div className="flex justify-between items-center">
                       <span className="font-semibold text-slate-800">Total Deductions</span>
                       <span className="font-bold text-slate-800">-{formatCurrency(
-                        (payslip.deductions || []).reduce((sum, d) => sum + (d.amount || 0), 0)
+                        normDeductions.reduce((sum, d) => sum + (d.amount || 0), 0)
                       )}</span>
                     </div>
                   </div>
