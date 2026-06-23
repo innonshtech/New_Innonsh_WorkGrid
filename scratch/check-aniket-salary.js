@@ -7,10 +7,7 @@ async function checkAniketSalary() {
   });
   
   if(!emp) return;
-  const ps = await prisma.payrollEmployeeSalary.findFirst({
-    where: { employeeId: emp.id }
-  });
-  console.log('Salary Structure:', ps);
+  console.log('Employee payslipStructure:', JSON.stringify(emp.payslipStructure, null, 2));
 }
 
 checkAniketSalary().finally(() => setTimeout(() => prisma.$disconnect(), 1000));
