@@ -222,6 +222,52 @@ export async function PUT(request, { params }) {
 
     console.log("✅ Employee updated successfully in database:", updatedEmployee.employeeId);
 
+    // Sync with active PayrollEmployeeSalary record to keep template componentValues aligned
+    try {
+      const activeSalary = await prisma.payrollEmployeeSalary.findFirst({
+        where: { employeeId: updatedEmployee.id, status: 'Active' }
+      });
+
+      if (activeSalary && body.payslipStructure) {
+        const newComponents = { BASIC: body.payslipStructure.basicSalary || activeSalary.basicSalary };
+        
+        if (Array.isArray(body.payslipStructure.earnings)) {
+          body.payslipStructure.earnings.forEach(e => {
+            if (e.enabled) {
+              const amt = e.calculationType === 'percentage'
+                ? (newComponents.BASIC * (e.percentage || 0)) / 100
+                : (e.fixedAmount || 0);
+              newComponents[e.code || e.name?.toUpperCase().replace(/ /g, '_')] = Math.round(amt);
+            }
+          });
+        }
+        
+        if (Array.isArray(body.payslipStructure.deductions)) {
+          body.payslipStructure.deductions.forEach(d => {
+            if (d.enabled) {
+              const amt = d.calculationType === 'percentage'
+                ? (newComponents.BASIC * (d.percentage || 0)) / 100
+                : (d.fixedAmount || 0);
+              newComponents[d.code || d.name?.toUpperCase().replace(/ /g, '_')] = Math.round(amt);
+            }
+          });
+        }
+
+        await prisma.payrollEmployeeSalary.update({
+          where: { id: activeSalary.id },
+          data: {
+            basicSalary: body.payslipStructure.basicSalary || activeSalary.basicSalary,
+            grossSalary: body.payslipStructure.grossSalary || activeSalary.grossSalary,
+            ctc: body.payslipStructure.ctc || activeSalary.ctc,
+            componentValues: newComponents
+          }
+        });
+        console.log("✅ Synchronized active PayrollEmployeeSalary componentValues:", newComponents);
+      }
+    } catch (syncErr) {
+      console.error("⚠️ Warning: Failed to sync active PayrollEmployeeSalary record:", syncErr);
+    }
+
     // Log activity
     let performer = null;
     if (body.updatedBy) {
