@@ -8,24 +8,22 @@ const getCachedStats = unstable_cache(
         // Resolve Project IDs and Employee IDs belonging to this organization
         const [projects, activeEmployees] = await Promise.all([
             prisma.project.findMany({ where: { organizationId }, select: { id: true, mongoId: true, status: true, projectData: true } }),
-            prisma.employee.findMany({ where: { organizationId }, select: { id: true, mongoId: true, firstName: true, lastName: true, employeeId: true } })
+            prisma.employee.findMany({ where: { organizationId }, select: { id: true, mongoId: true, firstName: true, lastName: true, employeeId: true, status: true } })
         ]);
         const projectIds = projects.flatMap(p => [p.id, p.mongoId]).filter(Boolean);
         const employeeIds = activeEmployees.flatMap(e => [e.id, e.mongoId]).filter(Boolean);
 
         const [
-            totalTasks,
-            completedTasks,
-            totalEmployees,
             pendingTimesheets,
             tasksRaw
         ] = await Promise.all([
-            prisma.task.count({ where: { OR: [ { projectId: { in: projectIds } }, { employeeId: { in: employeeIds } } ] } }),
-            prisma.task.count({ where: { OR: [ { projectId: { in: projectIds } }, { employeeId: { in: employeeIds } } ], status: 'Completed' } }),
-            prisma.employee.count({ where: { organizationId, status: 'Active' } }),
             prisma.timesheet.count({ where: { employeeId: { in: employeeIds }, status: 'Submitted' } }),
             prisma.task.findMany({ where: { OR: [ { projectId: { in: projectIds } }, { employeeId: { in: employeeIds } } ] } })
         ]);
+
+        const totalTasks = tasksRaw.length;
+        const completedTasks = tasksRaw.filter(t => t.status === 'Completed').length;
+        const totalEmployees = activeEmployees.filter(e => e.status === 'Active').length;
 
         const averageProgress = tasksRaw.length > 0 
             ? Math.round(tasksRaw.reduce((acc, t) => {
@@ -74,10 +72,15 @@ const getCachedStats = unstable_cache(
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-        // Fetch timesheet entries created or dated in past 30 days
+        // Fetch timesheet entries created or dated in past 30 days belonging to this organization
         const recentEntries = await prisma.timesheetEntry.findMany({
             where: {
+                organizationId,
                 createdAt: { gte: thirtyDaysAgo }
+            },
+            select: {
+                employeeId: true,
+                modelData: true
             }
         });
 
