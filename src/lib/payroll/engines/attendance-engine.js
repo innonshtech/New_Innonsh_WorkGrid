@@ -132,41 +132,50 @@ export class AttendanceEngine {
           warnings.push(`${dateStr}: Punched in on an approved leave day. Overrode leave and counted as Present.`);
         }
 
-        const status = record.status;
-        switch (status) {
-          case 'Present':
-            presentDays++;
-            break;
-          case 'Half Day':
-            halfDays++;
-            presentDays += 0.5;
-            absentDays += 0.5;
-            unpaidLeaves += 0.5;
-            break;
-          case 'Absent':
-          case 'LOP':
-          case 'Unpaid Leave':
-            absentDays++;
-            unpaidLeaves++;
-            break;
-          case 'Paid Leave':
-            paidLeaves++;
-            break;
-          case 'Weekly Off':
-            weeklyOffs++;
-            break;
-          case 'Holiday':
-            holidayCount++;
-            break;
-          default:
-            // Check-in fallback
-            if (record.checkIn) {
+        const hasPunchIn = !!record.checkIn;
+        const hasPunchOut = !!record.checkOut;
+        const forgotCheckOut = hasPunchIn && !hasPunchOut;
+
+        if (forgotCheckOut) {
+          presentDays++;
+          warnings.push(`${dateStr}: Checked in but forgot to check out. Overrode status to Present.`);
+        } else {
+          const status = record.status;
+          switch (status) {
+            case 'Present':
               presentDays++;
-            } else {
+              break;
+            case 'Half Day':
+              halfDays++;
+              presentDays += 0.5;
+              absentDays += 0.5;
+              unpaidLeaves += 0.5;
+              break;
+            case 'Absent':
+            case 'LOP':
+            case 'Unpaid Leave':
               absentDays++;
               unpaidLeaves++;
-            }
-            break;
+              break;
+            case 'Paid Leave':
+              paidLeaves++;
+              break;
+            case 'Weekly Off':
+              weeklyOffs++;
+              break;
+            case 'Holiday':
+              holidayCount++;
+              break;
+            default:
+              // Check-in fallback
+              if (record.checkIn) {
+                presentDays++;
+              } else {
+                absentDays++;
+                unpaidLeaves++;
+              }
+              break;
+          }
         }
         // Accumulate overtime
         if (record.overtimeHours) {
