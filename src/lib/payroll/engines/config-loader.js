@@ -440,6 +440,38 @@ export class ConfigLoader {
   }
 
   // ─────────────────────────────────────────────────────────
+  // SHIFTS AND WORKING DAYS
+  // ─────────────────────────────────────────────────────────
+
+  async loadWorkingDays(employee) {
+    if (!employee || !employee.defaultShift) {
+      return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    }
+
+    try {
+      const shift = await prisma.workingShift.findFirst({
+        where: {
+          OR: [
+            { id: employee.defaultShift },
+            { mongoId: employee.defaultShift }
+          ]
+        }
+      });
+
+      if (shift && shift.modelData) {
+        const data = typeof shift.modelData === 'string' ? JSON.parse(shift.modelData) : shift.modelData;
+        if (Array.isArray(data.workingDays) && data.workingDays.length > 0) {
+          return data.workingDays;
+        }
+      }
+    } catch (err) {
+      console.error(`Failed to load working days for employee shift ${employee.defaultShift}:`, err);
+    }
+
+    return ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+  }
+
+  // ─────────────────────────────────────────────────────────
   // HOLIDAYS
   // ─────────────────────────────────────────────────────────
 
@@ -450,7 +482,8 @@ export class ConfigLoader {
     const holidayListId = employee.holidayListId;
     const orgId = employee.organizationId;
 
-    return prisma.holiday.findMany({
+    // Fetch regular holidays
+    const regularHolidays = await prisma.holiday.findMany({
       where: {
         status: 'Active',
         date: { gte: startDate, lte: endDate },
@@ -460,6 +493,35 @@ export class ConfigLoader {
           : [{ organizationId: orgId }],
       },
     });
+
+    // Fetch approved restricted holiday claims for this employee in this month
+    try {
+      const claims = await prisma.restrictedHolidayClaim.findMany({
+        where: {
+          employeeId: employeeId,
+          status: 'Approved',
+          year: year
+        }
+      });
+
+      if (claims.length > 0) {
+        const claimHolidayIds = claims.map(c => c.holidayId).filter(Boolean);
+        const claimedHolidays = await prisma.holiday.findMany({
+          where: {
+            id: { in: claimHolidayIds },
+            status: 'Active',
+            date: { gte: startDate, lte: endDate },
+            isRestricted: true
+          }
+        });
+
+        return [...regularHolidays, ...claimedHolidays];
+      }
+    } catch (err) {
+      console.error("Failed to load claimed restricted holidays:", err);
+    }
+
+    return regularHolidays;
   }
 
   // ─────────────────────────────────────────────────────────

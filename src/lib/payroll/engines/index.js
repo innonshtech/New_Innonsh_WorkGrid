@@ -66,6 +66,9 @@ export { ArrearEngine } from './arrear-engine.js';
 // Tax Engine
 export { TaxEngine } from './tax-engine.js';
 
+// YTD Tracker
+export { YTDTracker } from './ytd-tracker.js';
+
 // Workflow Engine
 export { WorkflowEngine } from './workflow-engine.js';
 

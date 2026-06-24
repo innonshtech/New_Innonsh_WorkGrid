@@ -52,6 +52,7 @@ import { ArrearEngine } from './arrear-engine.js';
 import { GratuityEngine } from './gratuity-engine.js';
 import { LeaveEncashmentEngine } from './leave-encashment-engine.js';
 import { TaxEngine } from './tax-engine.js';
+import { YTDTracker } from './ytd-tracker.js';
 
 export class PayrollCalculationEngine {
   constructor() {
@@ -72,6 +73,7 @@ export class PayrollCalculationEngine {
     this.gratuityEngine = null;
     this.leaveEncashmentEngine = null;
     this.taxEngine = null;
+    this.ytdTracker = null;
   }
 
   /**
@@ -129,6 +131,7 @@ export class PayrollCalculationEngine {
     this.gratuityEngine = new GratuityEngine(this.roundingEngine, this.logger);
     this.leaveEncashmentEngine = new LeaveEncashmentEngine(this.roundingEngine, this.logger);
     this.taxEngine = new TaxEngine(this.roundingEngine, this.logger);
+    this.ytdTracker = new YTDTracker();
 
     // Result object — built progressively through all 14 steps
     const result = {
@@ -144,6 +147,7 @@ export class PayrollCalculationEngine {
 
       // Salary Structure (Step 2)
       salaryAssignment: null,
+      salaryAssignmentId: null,
       templateName: null,
       ctc: 0,
 
@@ -280,6 +284,19 @@ export class PayrollCalculationEngine {
       const financialYear = this.configLoader.getFinancialYear(month, year);
       const remainingMonths = this.configLoader.getRemainingMonths(month, year);
 
+      // Fix #10: Check if financial year is locked
+      const fyRecord = await prisma.payrollFinancialYear.findFirst({
+        where: {
+          organizationId: organizationId,
+          name: {
+            in: [financialYear, `FY ${financialYear}`]
+          }
+        }
+      });
+      if (fyRecord && fyRecord.isLocked) {
+        throw new Error(`Cannot run calculation: Financial Year ${financialYear} is locked.`);
+      }
+
       this.logger.log(3, 'LOAD_PAYROLL_MONTH', null,
         `Month: ${month}/${year}, FY: ${financialYear}, Days: ${totalDaysInMonth}, Remaining months: ${remainingMonths}`,
         { month, year, totalDaysInMonth, financialYear, remainingMonths },
@@ -293,9 +310,10 @@ export class PayrollCalculationEngine {
       const attendanceRecords = await this.configLoader.loadAttendance(employeeId, month, year);
       const leaveRecord = await this.configLoader.loadLeaveRecord(employeeId, month, year);
       const holidays = await this.configLoader.loadHolidays(employeeId, employee, month, year);
+      const workingDays = await this.configLoader.loadWorkingDays(employee);
 
       result.attendance = this.attendanceEngine.processAttendance(
-        attendanceRecords, leaveRecord, holidays, month, year
+        attendanceRecords, leaveRecord, holidays, month, year, workingDays
       );
 
       // Apply LOP override if provided
@@ -636,8 +654,26 @@ export class PayrollCalculationEngine {
       // ═══════════════════════════════════════════════════════
       // STEP 11: CALCULATE TAX (TDS)
       // ═══════════════════════════════════════════════════════
+      this.logger.startStep(11, 'CALCULATE_TAX');
       declarationMap['BASIC_ANNUAL'] = (result.proratedEarnings?.BASIC || result.salaryAssignment?.basicSalary || 0) * 12;
       declarationMap['HRA_ANNUAL'] = (result.proratedEarnings?.HRA || result.salaryAssignment?.componentValues?.HRA || 0) * 12;
+
+      // Fix #9: Auto-calculate YTD from previous payslips
+      let ytdData = { ytdGross: 0, ytdTDS: 0, monthsProcessed: 0 };
+      try {
+        ytdData = await this.ytdTracker.getYTD(employeeId, month, year);
+        this.logger.log(11, 'CALCULATE_TAX', 'YTD_LOOKUP',
+          `YTD from ${ytdData.monthsProcessed} previous months: Gross=₹${ytdData.ytdGross}, TDS=₹${ytdData.ytdTDS}`,
+          { monthsProcessed: ytdData.monthsProcessed },
+          ytdData.ytdTDS
+        );
+      } catch (ytdErr) {
+        this.logger.logError(11, 'CALCULATE_TAX', 'YTD_LOOKUP', ytdErr);
+      }
+
+      // Use manual overrides if provided, otherwise use auto-calculated YTD
+      const effectiveYtdTDS = overrides.ytdTDS !== undefined ? Number(overrides.ytdTDS) : ytdData.ytdTDS;
+      const effectiveYtdGross = overrides.ytdGross !== undefined ? Number(overrides.ytdGross) : ytdData.ytdGross;
 
       result.taxBreakdown = this.taxEngine.calculateMonthlyTDS({
         taxSlabs,
@@ -649,10 +685,11 @@ export class PayrollCalculationEngine {
         remainingMonths,
         declarations: declarationMap,
         previousEmployerTDS: Number(overrides.previousEmployerTDS || 0),
-        ytdTDS: Number(overrides.ytdTDS || 0),
-        ytdGross: Number(overrides.ytdGross || 0),
+        ytdTDS: effectiveYtdTDS,
+        ytdGross: effectiveYtdGross,
       });
       result.monthlyTDS = result.taxBreakdown.monthlyTDS;
+      result.ytdData = ytdData; // Attach for inspection
 
       // ═══════════════════════════════════════════════════════
       // STEP 12: CALCULATE OTHER DEDUCTIONS
@@ -777,6 +814,7 @@ export class PayrollCalculationEngine {
 
       result.status = 'CALCULATED';
       result.calculatedAt = new Date();
+      result.salaryAssignmentId = result.salaryAssignment?.id || null;
 
       // Build structured deductions breakdown for payslip
       result.deductionsBreakdown = {};
@@ -917,40 +955,52 @@ export class PayrollCalculationEngine {
       employees: [],
     };
 
-    for (const empId of employeeIds) {
-      try {
-        const empResult = await this.calculate({
-          employeeId: empId,
-          month,
-          year,
-          organizationId,
-          payrollRunId,
-          calculatedById,
-        });
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < employeeIds.length; i += BATCH_SIZE) {
+      const batch = employeeIds.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.allSettled(
+        batch.map(async (empId) => {
+          const empResult = await this.calculate({
+            employeeId: empId,
+            month,
+            year,
+            organizationId,
+            payrollRunId,
+            calculatedById,
+          });
+          return { empResult };
+        })
+      );
 
-        if (empResult.status === 'CALCULATED') {
-          results.success++;
-          results.totalGross += empResult.totalEarnings;
-          results.totalDeductions += empResult.totalDeductions;
-          results.totalNet += empResult.netSalary;
+      for (let j = 0; j < batchResults.length; j++) {
+        const settled = batchResults[j];
+        const empId = batch[j];
+        if (settled.status === 'fulfilled') {
+          const { empResult } = settled.value;
+          if (empResult.status === 'CALCULATED') {
+            results.success++;
+            results.totalGross += empResult.totalEarnings;
+            results.totalDeductions += empResult.totalDeductions;
+            results.totalNet += empResult.netSalary;
+          } else {
+            results.errors++;
+          }
+
+          results.employees.push({
+            employeeId: empId,
+            name: empResult.employee?.name,
+            status: empResult.status,
+            netSalary: empResult.netSalary,
+            errorMessage: empResult.errorMessage,
+          });
         } else {
           results.errors++;
+          results.employees.push({
+            employeeId: empId,
+            status: 'ERROR',
+            errorMessage: settled.reason?.message || 'Parallel calculation rejected',
+          });
         }
-
-        results.employees.push({
-          employeeId: empId,
-          name: empResult.employee?.name,
-          status: empResult.status,
-          netSalary: empResult.netSalary,
-          errorMessage: empResult.errorMessage,
-        });
-      } catch (error) {
-        results.errors++;
-        results.employees.push({
-          employeeId: empId,
-          status: 'ERROR',
-          errorMessage: error.message,
-        });
       }
     }
 

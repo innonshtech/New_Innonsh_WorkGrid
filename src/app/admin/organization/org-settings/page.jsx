@@ -176,8 +176,9 @@ export default function OrgSettingsPage() {
                 activeTab === 'designations' ? 'designations' : 
                 activeTab === 'banks' ? 'banks' : 'cost-centers';
 
-            const endpoint = type === 'cost-centers' ? `/api/v1/admin/finance/${type}` : `/api/v1/admin/crm/${type}`;
+            const baseEndpoint = type === 'cost-centers' ? `/api/v1/admin/finance/${type}` : `/api/v1/admin/crm/${type}`;
             const method = editingItem ? 'PUT' : 'POST';
+            const endpoint = editingItem ? `${baseEndpoint}?id=${editingItem._id}` : baseEndpoint;
 
             let payload = { ...formData };
             if (activeTab === 'business-units') { delete payload.departmentId; delete payload.businessUnitId; delete payload.budget; delete payload.code; }
