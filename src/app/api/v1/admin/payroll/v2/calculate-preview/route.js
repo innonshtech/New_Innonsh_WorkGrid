@@ -3,8 +3,6 @@ import prisma from '@/lib/db/prisma';
 import { getAuthUser, authorize } from "@/lib/auth-util";
 import { PayrollCalculationEngine } from "@/lib/payroll/engines";
 
-const calculationEngine = new PayrollCalculationEngine();
-
 export async function POST(request) {
   try {
     const authUser = await getAuthUser();
@@ -36,6 +34,9 @@ export async function POST(request) {
       return NextResponse.json({ error: "Unauthorized access" }, { status: 403 });
     }
 
+    // Per-request engine instance to prevent race conditions
+    const calculationEngine = new PayrollCalculationEngine();
+
     // Run calculation engine
     const result = await calculationEngine.calculate({
       employeeId,
@@ -46,7 +47,7 @@ export async function POST(request) {
       overrides: { ...overrides, isPreview: true }
     });
 
-    // Also load calculation logs from the logger in memory
+    // Load calculation logs from this request's engine instance
     const logs = calculationEngine.logger ? calculationEngine.logger.getLogs() : [];
 
     return NextResponse.json({

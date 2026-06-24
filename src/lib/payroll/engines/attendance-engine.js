@@ -25,22 +25,55 @@ export class AttendanceEngine {
    * @param {number} year - Payroll year
    * @returns {object} Attendance breakdown
    */
-  processAttendance(attendanceRecords, leaveRecord, holidays, month, year) {
+  processAttendance(attendanceRecords, leaveRecord, holidays, month, year, workingDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]) {
     const startTime = performance.now();
 
     const totalDaysInMonth = new Date(year, month, 0).getDate();
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0);
+    
+    // Normalize to UTC midnight to avoid local timezone offsets shifting dates
+    const startDate = new Date(Date.UTC(year, month - 1, 1));
+    const endDate = new Date(Date.UTC(year, month, 0));
 
-    // Build date maps
+    // UTC formatting helper
+    const toUTCDateString = (date) => {
+      const d = new Date(date);
+      if (isNaN(d.getTime())) return '';
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    };
+
+    // Build date maps using YYYY-MM-DD
     const attendanceMap = new Map();
     for (const rec of attendanceRecords) {
-      attendanceMap.set(new Date(rec.date).toDateString(), rec);
+      const dateStr = toUTCDateString(rec.date);
+      if (dateStr) {
+        attendanceMap.set(dateStr, rec);
+      }
     }
 
     const holidayDates = new Set();
     for (const h of holidays) {
-      holidayDates.set(new Date(h.date).toDateString());
+      const dateStr = toUTCDateString(h.date);
+      if (dateStr) {
+        holidayDates.set(dateStr);
+      }
+    }
+
+    const leaveMap = new Map();
+    if (leaveRecord && leaveRecord.leaves) {
+      const leavesList = typeof leaveRecord.leaves === 'string' 
+        ? JSON.parse(leaveRecord.leaves) 
+        : (Array.isArray(leaveRecord.leaves) ? leaveRecord.leaves : []);
+      for (const item of leavesList) {
+        if (item && item.date) {
+          const lDateStr = toUTCDateString(item.date);
+          if (lDateStr) {
+            leaveMap.set(lDateStr, item);
+          }
+        }
+      }
     }
 
     // Count each day type
@@ -52,20 +85,53 @@ export class AttendanceEngine {
     let paidLeaves = 0;
     let unpaidLeaves = 0;
     let overtimeHours = 0;
+    const warnings = [];
+    let overriddenLeavesCount = 0;
+
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     let current = new Date(startDate);
     while (current <= endDate) {
-      const dateStr = current.toDateString();
-      const dayOfWeek = current.getDay(); // 0=Sun, 6=Sat
+      const dateStr = toUTCDateString(current);
+      const dayOfWeek = current.getUTCDay();
+      const dayOfWeekName = dayNames[dayOfWeek];
+      
       const record = attendanceMap.get(dateStr);
       const isHoliday = holidayDates.has(dateStr);
-      const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+      const isWeekend = !workingDays.includes(dayOfWeekName);
+      const leaveItem = leaveMap.get(dateStr);
+
+      const hasPunchOnLeave = leaveItem && record && (record.checkIn || record.status === 'Present');
 
       if (isHoliday) {
         holidayCount++;
       } else if (isWeekend) {
         weeklyOffs++;
+      } else if (leaveItem && !hasPunchOnLeave) {
+        const type = leaveItem.leaveType || '';
+        if (type.includes('Half-Day') || type.includes('half')) {
+          halfDays++;
+          presentDays += 0.5;
+          if (type.toLowerCase().includes('paid')) {
+            paidLeaves += 0.5;
+          } else {
+            unpaidLeaves += 0.5;
+            absentDays += 0.5;
+          }
+        } else {
+          if (type.toLowerCase().includes('paid')) {
+            paidLeaves++;
+          } else {
+            unpaidLeaves++;
+            absentDays++;
+          }
+        }
       } else if (record) {
+        if (hasPunchOnLeave) {
+          overriddenLeavesCount++;
+          warnings.push(`${dateStr}: Punched in on an approved leave day. Overrode leave and counted as Present.`);
+        }
+
         const status = record.status;
         switch (status) {
           case 'Present':
@@ -75,6 +141,7 @@ export class AttendanceEngine {
             halfDays++;
             presentDays += 0.5;
             absentDays += 0.5;
+            unpaidLeaves += 0.5;
             break;
           case 'Absent':
           case 'LOP':
@@ -92,8 +159,13 @@ export class AttendanceEngine {
             holidayCount++;
             break;
           default:
-            // If record exists but unknown status, count as present
-            presentDays++;
+            // Check-in fallback
+            if (record.checkIn) {
+              presentDays++;
+            } else {
+              absentDays++;
+              unpaidLeaves++;
+            }
             break;
         }
         // Accumulate overtime
@@ -101,20 +173,20 @@ export class AttendanceEngine {
           overtimeHours += Number(record.overtimeHours);
         }
       } else {
-        // No record for a working day — treat as present (configurable)
-        presentDays++;
+        // No record for a working day — count as LOP/absent
+        absentDays++;
+        unpaidLeaves++;
       }
 
-      current.setDate(current.getDate() + 1);
+      current.setUTCDate(current.getUTCDate() + 1);
     }
 
-    // Add leave record LOP (from leave management module)
+    // Fallback sync with leave summary totals if day-by-day was lower (adjusting for overridden leave days)
     if (leaveRecord && leaveRecord.summary) {
       const summary = typeof leaveRecord.summary === 'object' ? leaveRecord.summary : {};
-      const leaveUnpaid = (summary.unpaidLeaves || 0) + (summary.halfDayUnpaidLeaves || 0) * 0.5;
-      const leavePaid = (summary.paidLeaves || 0) + (summary.halfDayPaidLeaves || 0) * 0.5;
+      const leaveUnpaid = Number(summary.unpaidLeaves || 0) + Number(summary.halfDayUnpaidLeaves || 0) * 0.5;
+      const leavePaid = Math.max(0, (Number(summary.paidLeaves || 0) + Number(summary.halfDayPaidLeaves || 0) * 0.5) - overriddenLeavesCount);
 
-      // Only add if not already counted via attendance
       unpaidLeaves = Math.max(unpaidLeaves, leaveUnpaid);
       paidLeaves = Math.max(paidLeaves, leavePaid);
     }
@@ -122,7 +194,7 @@ export class AttendanceEngine {
     // Final calculations
     const payrollDays = totalDaysInMonth;  // Calendar days approach
     const lopDays = unpaidLeaves;
-    const payableDays = payrollDays - lopDays;
+    const payableDays = Math.max(0, payrollDays - lopDays);
 
     const result = {
       payrollDays,
@@ -138,6 +210,7 @@ export class AttendanceEngine {
       payableDays,
       overtimeHours,
       prorationFactor: payrollDays > 0 ? payableDays / payrollDays : 1,
+      warnings,
     };
 
     // Log

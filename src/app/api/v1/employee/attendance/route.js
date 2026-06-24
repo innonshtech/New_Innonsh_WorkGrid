@@ -486,28 +486,65 @@ export async function GET(request) {
     const rawDefaultShift = allOrgShifts.find(s => s.modelData?.isDefault === true) || allOrgShifts[0];
     const defaultShift = rawDefaultShift ? flattenModelData(rawDefaultShift) : null;
 
+    // Prefetch all relevant shift rosters to prevent connection pool timeout/leak in Promise.all
+    const employeeIds = attendance.map(rec => rec.employee?.id || rec.employeeId).filter(Boolean);
+    let rosters = [];
+    if (employeeIds.length > 0) {
+      const rosterWhere = {
+        employeeId: { in: employeeIds }
+      };
+      if (date) {
+        const startOfDay = new Date(date);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(date);
+        endOfDay.setHours(23, 59, 59, 999);
+        rosterWhere.date = { gte: startOfDay, lte: endOfDay };
+      } else if (startDate && endDate) {
+        rosterWhere.date = { gte: new Date(startDate), lte: new Date(endDate) };
+      } else if (startDate) {
+        rosterWhere.date = { gte: new Date(startDate) };
+      } else if (endDate) {
+        rosterWhere.date = { lte: new Date(endDate) };
+      }
+      rosters = await prisma.shiftRoster.findMany({
+        where: rosterWhere
+      });
+    }
+
+    // Build O(1) roster lookup map
+    const rosterMap = new Map();
+    rosters.forEach(r => {
+      if (r.employeeId && r.date) {
+        const dateStr = new Date(r.date).toDateString();
+        rosterMap.set(`${r.employeeId}_${dateStr}`, r);
+      }
+    });
+
+    const shiftCache = new Map();
+
     attendance = await Promise.all(attendance.map(async (rec) => {
       if (rec.employee && rec.employee.id) {
         const recDate = new Date(rec.date);
-        const startOfRecDay = new Date(recDate);
-        startOfRecDay.setHours(0, 0, 0, 0);
-        const endOfRecDay = new Date(recDate);
-        endOfRecDay.setHours(23, 59, 59, 999);
-
-        const roster = await prisma.shiftRoster.findFirst({
-          where: {
-            employeeId: rec.employee.id,
-            date: { gte: startOfRecDay, lte: endOfRecDay }
-          }
-        });
+        const dateStr = recDate.toDateString();
+        const roster = rosterMap.get(`${rec.employee.id}_${dateStr}`);
 
         let shift = null;
         const rosterShiftId = roster?.shiftData?.shiftId;
         if (rosterShiftId) {
-          const fetchedShift = allOrgShifts.find(s => s.id === rosterShiftId || s.mongoId === rosterShiftId) || 
-            await prisma.workingShift.findFirst({ where: { OR: [{ id: rosterShiftId }, { mongoId: rosterShiftId }] } });
-          if (fetchedShift) {
-            shift = flattenModelData(fetchedShift);
+          shift = allOrgShifts.find(s => s.id === rosterShiftId || s.mongoId === rosterShiftId);
+          if (!shift) {
+            if (shiftCache.has(rosterShiftId)) {
+              shift = shiftCache.get(rosterShiftId);
+            } else {
+              const fetchedShift = await prisma.workingShift.findFirst({ where: { OR: [{ id: rosterShiftId }, { mongoId: rosterShiftId }] } });
+              if (fetchedShift) {
+                shift = fetchedShift;
+                shiftCache.set(rosterShiftId, fetchedShift);
+              }
+            }
+          }
+          if (shift) {
+            shift = flattenModelData(shift);
           }
         }
         if (!shift) {
