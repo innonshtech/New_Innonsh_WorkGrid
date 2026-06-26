@@ -23,7 +23,7 @@ export class LoanRecoveryEngine {
    * @param {Array} activeLoans - From ConfigLoader.loadActiveLoans()
    * @returns {object} Loan recovery breakdown
    */
-  calculate(activeLoans) {
+  calculate(activeLoans, month, year) {
     if (this.logger) this.logger.startStep(12, 'CALCULATE_LOAN_RECOVERY');
 
     const result = {
@@ -43,7 +43,29 @@ export class LoanRecoveryEngine {
 
     for (const loan of activeLoans) {
       const loanData = loan.loanData && typeof loan.loanData === 'object' ? loan.loanData : {};
-      const emi = Number(loan.emi || loanData.emi || loanData.emiAmount || 0);
+      
+      let emi = 0;
+      if (Array.isArray(loanData.repaymentSchedule) && loanData.repaymentSchedule.length > 0) {
+        if (month !== undefined && year !== undefined) {
+          const matchingInstallment = loanData.repaymentSchedule.find(item => {
+            if (!item.dueDate) return false;
+            const date = new Date(item.dueDate);
+            return (date.getMonth() + 1 === Number(month)) && (date.getFullYear() === Number(year));
+          });
+          emi = matchingInstallment ? Number(matchingInstallment.amount || 0) : 0;
+        } else {
+          const pendingItem = loanData.repaymentSchedule.find(item => item.status === 'Pending') || loanData.repaymentSchedule[0];
+          emi = Number(pendingItem?.amount || 0);
+        }
+      } else {
+        emi = Number(loan.emi || loanData.emi || loanData.emiAmount || 0);
+        if (emi <= 0) {
+          const installments = Number(loanData.installments || 1);
+          const amount = Number(loan.amount || loanData.amount || 0);
+          emi = Math.round(amount / installments);
+        }
+      }
+
       const totalAmount = Number(loan.amount || loanData.principalAmount || loanData.amount || 0);
       const recoveredAmount = Number(loanData.recoveredAmount || loanData.totalRepaid || 0);
       const pendingAmount = totalAmount - recoveredAmount;

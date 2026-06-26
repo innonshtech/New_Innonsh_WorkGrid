@@ -7,17 +7,21 @@ import {
   Settings, 
   Users, 
   FileText, 
-  AlertCircle,
+  AlertCircle, 
   CheckCircle2, 
   Send, 
-  Download,
-  AlertTriangle,
-  RotateCw,
-  Plus,
-  HelpCircle,
-  Layers,
-  FileMinus,
-  Sparkles
+  Download, 
+  AlertTriangle, 
+  RotateCw, 
+  Plus, 
+  HelpCircle, 
+  Layers, 
+  FileMinus, 
+  Sparkles,
+  Paperclip,
+  Upload,
+  ExternalLink,
+  Check
 } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { toast } from 'sonner';
@@ -84,6 +88,25 @@ export default function EmployeePayrollDashboard() {
 
   const [previewResult, setPreviewResult] = useState(null);
   const [expandedTaxInspector, setExpandedTaxInspector] = useState(false);
+
+  // Proof upload states
+  const [proofUploading, setProofUploading] = useState(false);
+  const [proofFileUrl, setProofFileUrl] = useState('');
+  const [proofFileName, setProofFileName] = useState('');
+  const [proofInvestmentType, setProofInvestmentType] = useState('80C');
+  const [proofDescription, setProofDescription] = useState('');
+  const [myProofs, setMyProofs] = useState([]);
+  
+  // Comment attachment states
+  const [commentUploading, setCommentUploading] = useState(false);
+  const [uploadedCommentUrl, setUploadedCommentUrl] = useState('');
+  const [uploadedCommentName, setUploadedCommentName] = useState('');
+
+  // Ticket creation category state
+  const [queryCategory, setQueryCategory] = useState('PAYSLIP');
+  const [uploadedUrl, setUploadedUrl] = useState('');
+  const [uploadedName, setUploadedName] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     fetchMySalary();
@@ -242,6 +265,160 @@ export default function EmployeePayrollDashboard() {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/v1/employee/payroll/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUploadedUrl(data.url);
+        setUploadedName(file.name);
+        toast.success('Document uploaded successfully!');
+      } else {
+        toast.error(data.error || 'Failed to upload document');
+      }
+    } catch (err) {
+      toast.error('Error uploading file');
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleCommentFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setCommentUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/v1/employee/payroll/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUploadedCommentUrl(data.url);
+        setUploadedCommentName(file.name);
+        toast.success('Document attached!');
+      } else {
+        toast.error(data.error || 'Failed to upload document');
+      }
+    } catch (err) {
+      toast.error('Error uploading file');
+      console.error(err);
+    } finally {
+      setCommentUploading(false);
+    }
+  };
+
+  const handleProofFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setProofUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await fetch('/api/v1/employee/payroll/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProofFileUrl(data.url);
+        setProofFileName(file.name);
+        toast.success('Proof document uploaded successfully!');
+      } else {
+        toast.error(data.error || 'Failed to upload proof document');
+      }
+    } catch (err) {
+      toast.error('Error uploading proof document');
+      console.error(err);
+    } finally {
+      setProofUploading(false);
+    }
+  };
+
+  const submitInvestmentProof = async (e) => {
+    e.preventDefault();
+    if (!proofFileUrl) {
+      toast.error('Please upload an investment proof document first.');
+      return;
+    }
+    if (!proofDescription.trim()) {
+      toast.error('Please provide a brief description/note about the investment.');
+      return;
+    }
+
+    setSubmitLoading(true);
+    try {
+      // 1. Fetch current declaration
+      let currentDecl = {};
+      try {
+        currentDecl = await safeFetchJson(`/api/v1/admin/payroll/investments?employeeId=${user.id}&financialYear=2025-26`);
+      } catch (err) {
+        console.warn('Failed to load existing declaration, creating new', err);
+      }
+
+      // 2. Append new proof
+      const existingProofs = currentDecl.proofs || [];
+      const newProof = {
+        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15),
+        category: proofInvestmentType,
+        description: proofDescription,
+        url: proofFileUrl,
+        fileName: proofFileName,
+        status: 'Pending Review',
+        submittedAt: new Date().toISOString()
+      };
+
+      const updatedProofs = [...existingProofs, newProof];
+
+      // 3. Save to InvestmentDeclaration
+      const data = await safeFetchJson('/api/v1/admin/payroll/investments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: user.id,
+          financialYear: '2025-26',
+          sections: currentDecl.sections || {
+            section80C: { total: 0 },
+            section80D: { total: 0 },
+            hra: { annualRent: 0 }
+          },
+          proofs: updatedProofs
+        })
+      });
+
+      if (data.id || data._id) {
+        toast.success('Investment proof document submitted successfully!');
+        setProofDescription('');
+        setProofFileUrl('');
+        setProofFileName('');
+        fetchMyDeclarations(user.id); // Reload declarations and proofs list
+      } else {
+        toast.error('Failed to submit proof');
+      }
+    } catch (err) {
+      toast.error(err.message || 'Error submitting proof document');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
   const handleCreateQuery = async (e) => {
     e.preventDefault();
     const category = e.target.category.value;
@@ -253,16 +430,32 @@ export default function EmployeePayrollDashboard() {
       return;
     }
 
+    let finalSubject = subject;
+    if (category === 'TAX') {
+      const invType = e.target.investmentType?.value;
+      if (invType) {
+        finalSubject = `[${invType}] ${subject}`;
+      }
+    }
+
     setSubmitLoading(true);
     try {
       const data = await safeFetchJson('/api/v1/employee/payroll/queries', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, subject, description })
+        body: JSON.stringify({ 
+          category, 
+          subject: finalSubject, 
+          description,
+          attachmentUrl: uploadedUrl || undefined
+        })
       });
       if (data.success) {
         toast.success('Query ticket raised successfully');
         e.target.reset();
+        setUploadedUrl('');
+        setUploadedName('');
+        setQueryCategory('PAYSLIP');
         fetchMyQueries();
       } else {
         toast.error(data.error || 'Failed to submit query');
@@ -276,18 +469,24 @@ export default function EmployeePayrollDashboard() {
 
   const submitQueryComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim() || !selectedQuery) return;
+    if (!newComment.trim() && !uploadedCommentUrl) return;
+    if (!selectedQuery) return;
     setSubmitLoading(true);
 
     try {
       const data = await safeFetchJson(`/api/v1/employee/payroll/queries/${selectedQuery.id}/comments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: newComment })
+        body: JSON.stringify({ 
+          message: newComment || `Attached document: ${uploadedCommentName}`,
+          attachmentUrl: uploadedCommentUrl || undefined
+        })
       });
       if (data.success) {
         toast.success('Message sent');
         setNewComment('');
+        setUploadedCommentUrl('');
+        setUploadedCommentName('');
         
         // Reload comments
         const detailData = await safeFetchJson(`/api/v1/employee/payroll/queries/${selectedQuery.id}/comments`);
@@ -319,6 +518,11 @@ export default function EmployeePayrollDashboard() {
             '80CCD_1B': sec.section80CCD_1B !== undefined ? sec.section80CCD_1B : (sec.nps !== undefined ? sec.nps : ''),
             'HRA': sec.hra?.annualRent !== undefined ? sec.hra.annualRent : '',
           });
+        }
+        if (data.proofs) {
+          setMyProofs(data.proofs);
+        } else {
+          setMyProofs([]);
         }
       }
     } catch (err) {
@@ -592,7 +796,8 @@ export default function EmployeePayrollDashboard() {
               { id: 'structure', name: 'My Salary Structure', icon: Layers },
               { id: 'payslips', name: 'My Payslips', icon: FileText },
               { id: 'tax', name: 'Tax Declarations', icon: Sparkles },
-              { id: 'queries', name: 'Queries Resolution', icon: MessageSquare, badge: queries.filter(q => q.status === 'OPEN').length }
+              { id: 'queries', name: 'Queries Resolution', icon: MessageSquare, badge: queries.filter(q => q.status === 'OPEN').length },
+              { id: 'proofs', name: 'Upload Proofs', icon: Paperclip }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -1100,28 +1305,70 @@ export default function EmployeePayrollDashboard() {
                                 <span>{new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                               </div>
                               <p className="text-xs leading-normal font-medium">{comment.message}</p>
+                              {comment.attachmentUrl && (
+                                <div className={`mt-2.5 pt-2 border-t text-xs ${isMe ? 'border-indigo-500/20' : 'border-slate-100'}`}>
+                                  <a
+                                    href={comment.attachmentUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex items-center gap-1 font-bold ${
+                                      isMe ? 'text-indigo-150 hover:text-white underline' : 'text-indigo-600 hover:text-indigo-850 underline'
+                                    }`}
+                                  >
+                                    <Download className="h-3 w-3 shrink-0" />
+                                    <span>View Proof Document</span>
+                                  </a>
+                                </div>
+                              )}
                             </div>
                           </div>
                         );
                       })}
                     </div>
 
-                    <form onSubmit={submitQueryComment} className="p-3 border-t border-slate-200 bg-slate-50/50 flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Type response back to HR..."
-                        className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-medium"
-                      />
-                      <button
-                        type="submit"
-                        disabled={submitLoading || !newComment.trim()}
-                        className="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl transition-colors shadow-sm"
-                      >
-                        <Send className="h-4 w-4" />
-                      </button>
-                    </form>
+                    <div className="border-t border-slate-200 bg-slate-50/50 p-3 space-y-2">
+                      {uploadedCommentName && (
+                        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-150 rounded-lg px-3 py-1.5 text-xs font-bold text-indigo-800 animate-in slide-in-from-bottom-1 duration-150">
+                          <span className="truncate max-w-md">Staged Attachment: {uploadedCommentName}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUploadedCommentUrl('');
+                              setUploadedCommentName('');
+                            }}
+                            className="text-rose-600 hover:text-rose-800 font-extrabold"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
+                      <form onSubmit={submitQueryComment} className="flex items-center space-x-2">
+                        <label className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl cursor-pointer transition-colors shadow-sm flex items-center justify-center shrink-0">
+                          <Paperclip className="h-4 w-4" />
+                          <input
+                            type="file"
+                            accept=".pdf,image/*"
+                            onChange={handleCommentFileUpload}
+                            className="hidden"
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          placeholder={commentUploading ? "Uploading attachment..." : "Type response back to HR..."}
+                          disabled={commentUploading}
+                          className="flex-1 bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-medium"
+                        />
+                        <button
+                          type="submit"
+                          disabled={submitLoading || commentUploading || (!newComment.trim() && !uploadedCommentUrl)}
+                          className="p-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl transition-colors shadow-sm"
+                        >
+                          <Send className="h-4 w-4" />
+                        </button>
+                      </form>
+                    </div>
                   </>
                 ) : (
                   <div className="p-8 flex-1 flex flex-col justify-center">
@@ -1131,7 +1378,12 @@ export default function EmployeePayrollDashboard() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
                           <label className="text-[10px] font-bold text-slate-500 uppercase">Query Category</label>
-                          <select name="category" className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none">
+                          <select 
+                            name="category" 
+                            value={queryCategory}
+                            onChange={(e) => setQueryCategory(e.target.value)}
+                            className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none"
+                          >
                             <option value="PAYSLIP">Payslip Query (Calculation Error)</option>
                             <option value="TAX">Tax Deduction / regime</option>
                             <option value="REIMBURSEMENT">Reimbursement dispute</option>
@@ -1150,19 +1402,56 @@ export default function EmployeePayrollDashboard() {
                         </div>
                       </div>
 
+                      {queryCategory === 'TAX' && (
+                        <div className="space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Investment Category</label>
+                          <select name="investmentType" className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none">
+                            <option value="80C">Section 80C (PPF, ELSS, LIC, EPF)</option>
+                            <option value="80D">Section 80D (Mediclaim)</option>
+                            <option value="80CCD_1B">Section 80CCD (1B) (NPS)</option>
+                            <option value="HRA">House Rent Allowance (HRA)</option>
+                            <option value="80G">Section 80G (Donations)</option>
+                            <option value="80E">Section 80E (Education Loan)</option>
+                            <option value="24B">Section 24(b) (Home Loan)</option>
+                            <option value="OTHER">Other Tax Deduction</option>
+                          </select>
+                        </div>
+                      )}
+
                       <div className="space-y-1">
                         <label className="text-[10px] font-bold text-slate-500 uppercase">Detailed Description</label>
                         <textarea
                           name="description"
-                          rows={4}
+                          rows={queryCategory === 'TAX' ? 2 : 4}
                           placeholder="Provide details about the incorrect amount or discrepancy..."
                           className="w-full bg-white border border-slate-250 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500 font-semibold"
                         />
                       </div>
 
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase">Attach Document Proof</label>
+                        <div className="flex items-center space-x-3">
+                          <label className="flex items-center space-x-1.5 px-3 py-2 bg-slate-50 hover:bg-slate-100 border border-slate-250 rounded-xl text-xs font-bold text-slate-650 cursor-pointer transition-all">
+                            <Upload className="h-3.5 w-3.5 shrink-0" />
+                            <span>{uploading ? 'Uploading...' : 'Choose File'}</span>
+                            <input
+                              type="file"
+                              accept=".pdf,image/*"
+                              onChange={handleFileUpload}
+                              className="hidden"
+                            />
+                          </label>
+                          {uploadedName && (
+                            <span className="text-xs text-emerald-600 font-bold truncate max-w-xs flex items-center gap-1">
+                              <Check className="h-4 w-4 shrink-0" /> {uploadedName}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
                       <button
                         type="submit"
-                        disabled={submitLoading}
+                        disabled={submitLoading || uploading}
                         className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
                       >
                         {submitLoading ? 'Submitting ticket...' : 'Open Support Ticket'}
@@ -1170,6 +1459,141 @@ export default function EmployeePayrollDashboard() {
                     </form>
                   </div>
                 )}
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB 5: DEDICATED INVESTMENT PROOF UPLOAD */}
+          {activeTab === 'proofs' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+              
+              {/* Left Side: Upload Form */}
+              <div className="lg:col-span-1 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-fit space-y-4">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-800 border-b border-slate-100 pb-3">Submit Investment Proof</h3>
+                  <p className="text-[11px] text-slate-500 mt-1">Upload files corresponding to your declared investments. Admins will verify them.</p>
+                </div>
+                
+                <form onSubmit={submitInvestmentProof} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Investment Category</label>
+                    <select 
+                      value={proofInvestmentType}
+                      onChange={(e) => setProofInvestmentType(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold focus:outline-none focus:bg-white"
+                    >
+                      <option value="80C">Section 80C (PPF, ELSS, LIC, EPF)</option>
+                      <option value="80D">Section 80D (Mediclaim)</option>
+                      <option value="80CCD_1B">Section 80CCD (1B) (NPS)</option>
+                      <option value="HRA">House Rent Allowance (HRA)</option>
+                      <option value="80G">Section 80G (Donations)</option>
+                      <option value="80E">Section 80E (Education Loan)</option>
+                      <option value="24B">Section 24(b) (Home Loan)</option>
+                      <option value="OTHER">Other Investment Proofs</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Brief Description / Notes</label>
+                    <textarea
+                      rows={3}
+                      value={proofDescription}
+                      onChange={(e) => setProofDescription(e.target.value)}
+                      placeholder="e.g. PPF contribution receipt of Rs. 1.5L from SBI"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-semibold focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase">Attach Proof Document</label>
+                    <div className="border border-dashed border-slate-300 rounded-xl p-4 bg-slate-50 hover:bg-slate-100/50 transition-all flex flex-col items-center justify-center space-y-2 text-center relative cursor-pointer">
+                      <input
+                        type="file"
+                        accept=".pdf,image/*"
+                        onChange={handleProofFileUpload}
+                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      />
+                      <Upload className="h-6 w-6 text-slate-400" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-700">Click to browse file</p>
+                        <p className="text-[9px] text-slate-400">PDF, PNG, JPG up to 10MB</p>
+                      </div>
+                    </div>
+                    {proofFileName && (
+                      <div className="flex items-center space-x-1.5 bg-indigo-50 border border-indigo-150 rounded-lg p-2 mt-2 text-xs font-bold text-indigo-800">
+                        <Check className="h-4 w-4 shrink-0 text-emerald-600" />
+                        <span className="truncate flex-1">{proofFileName}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={submitLoading || proofUploading || !proofFileUrl}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-colors"
+                  >
+                    {submitLoading ? 'Submitting...' : 'Submit Proof'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Right Side: List of submitted proofs */}
+              <div className="lg:col-span-2 bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-[500px] flex flex-col overflow-hidden">
+                <h3 className="font-extrabold text-base text-slate-800 border-b border-slate-100 pb-3">Your Submitted Proofs</h3>
+                
+                <div className="flex-1 overflow-y-auto divide-y divide-slate-100 pr-1 mt-2 font-medium">
+                  {myProofs.map(p => {
+                      const displayBadge = p.category || 'Investment';
+                      
+                      return (
+                        <div key={p.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs hover:bg-slate-50/20 px-2 rounded-xl transition-all">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[9px] font-extrabold uppercase">
+                                {displayBadge}
+                              </span>
+                              <span className="font-bold text-slate-850">Submitted Investment Proof</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-semibold">{p.description}</p>
+                            <span className="text-[9px] text-slate-400 block font-normal">Submitted on {new Date(p.submittedAt).toLocaleDateString()}</span>
+                          </div>
+
+                          <div className="flex items-center space-x-3 shrink-0">
+                            {p.url && (
+                              <a
+                                href={p.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 font-bold rounded-lg transition-all flex items-center gap-1"
+                              >
+                                <ExternalLink className="h-3 w-3 shrink-0" />
+                                <span>View File</span>
+                              </a>
+                            )}
+
+                            <span className={`px-2 py-1 text-[10px] rounded-full font-bold border ${
+                              p.status === 'Approved'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-250'
+                                : p.status === 'Rejected'
+                                ? 'bg-rose-50 text-rose-700 border-rose-250'
+                                : 'bg-amber-50 text-amber-700 border-amber-250'
+                            }`}>
+                              {p.status || 'Pending Review'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  {myProofs.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-20 text-slate-400 space-y-2">
+                      <Upload className="h-8 w-8 text-slate-300 animate-bounce" />
+                      <p className="font-bold text-slate-550">No investment proofs submitted yet</p>
+                      <p className="text-[10px] text-slate-400">Use the form on the left to upload and submit document proofs.</p>
+                    </div>
+                  )}
+                </div>
               </div>
 
             </div>

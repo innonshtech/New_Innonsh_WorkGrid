@@ -32,6 +32,7 @@ function mapEmployeeToMongoose(emp) {
     probationDuration: emp.probationDuration,
     isAttending: emp.isAttending,
     gratuityApplicable: emp.gratuityApplicable,
+    hraApplicable: emp.hraApplicable || 'yes',
     compOffBalance: emp.compOffBalance,
     personalDetails: {
       firstName: emp.firstName,
@@ -199,6 +200,7 @@ export async function PUT(request, { params }) {
       probationDuration: (body.probationDuration !== undefined) ? body.probationDuration : existingEmployee.probationDuration,
       isAttending: body.isAttending || existingEmployee.isAttending,
       gratuityApplicable: body.gratuityApplicable || existingEmployee.gratuityApplicable,
+      hraApplicable: body.hraApplicable || existingEmployee.hraApplicable,
       compOffBalance: (body.compOffBalance !== undefined) ? body.compOffBalance : existingEmployee.compOffBalance,
       status: body.status || existingEmployee.status,
 

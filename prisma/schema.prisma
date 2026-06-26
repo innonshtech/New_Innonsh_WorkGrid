@@ -1,10 +1,12 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/generated/client"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -124,6 +126,7 @@ model Employee {
   probationDuration     Int       @default(0)
   isAttending           String    @default("no")
   gratuityApplicable    String    @default("no")
+  hraApplicable         String    @default("yes")
 
   compOffBalance        Float     @default(0)
   status                String    @default("Active")
@@ -180,6 +183,9 @@ model Attendance {
   updatedAt           DateTime  @updatedAt
 
   employee            Employee  @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@index([employeeId, date])
 }
 
 model Leave {
@@ -444,6 +450,9 @@ model Payslip {
   updatedAt       DateTime  @updatedAt
 
   payrollRun      PayrollRun? @relation(fields: [payrollRunId], references: [id])
+
+  @@index([employeeId])
+  @@index([employeeId, month, year])
 }
 
 model Bonus {
@@ -458,6 +467,9 @@ model Bonus {
   updatedAt      DateTime  @updatedAt
   organizationId String?
   modelData      Json?
+
+  @@index([employeeId])
+  @@index([employeeId, status])
 }
 
 model Loan {

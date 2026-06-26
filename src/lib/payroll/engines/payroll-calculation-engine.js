@@ -101,12 +101,12 @@ export class PayrollCalculationEngine {
     payrollRunId = null,
     calculatedById = null,
     overrides = {},
+    configLoader = null,
   }) {
     const totalStartTime = performance.now();
 
     // ── Initialize Sub-Engines ──
     this.roundingEngine = new RoundingEngine();
-    await this.roundingEngine.loadConfig(organizationId);
 
     this.logger = new CalculationLogger({
       organizationId,
@@ -117,7 +117,7 @@ export class PayrollCalculationEngine {
       calculatedById,
     });
 
-    this.configLoader = new ConfigLoader(organizationId, new Date(year, month - 1, 15));
+    this.configLoader = configLoader || new ConfigLoader(organizationId, new Date(year, month - 1, 15));
     this.formulaEngine = new FormulaEngine(this.roundingEngine);
     this.attendanceEngine = new AttendanceEngine(this.logger);
     this.pfEngine = new PFEngine(this.roundingEngine, this.logger);
@@ -202,35 +202,107 @@ export class PayrollCalculationEngine {
     };
 
     try {
+      const financialYear = this.configLoader.getFinancialYear(month, year);
+      const timePromise = async (name, promise) => {
+        const s = performance.now();
+        const res = await promise;
+        console.log(`[Prefetch Timer] ${name} took ${(performance.now() - s).toFixed(2)}ms`);
+        return res;
+      };
+
+      const [
+        rawEmployee,
+        rawSalaryAssignment,
+        fyRecord,
+        componentMasters,
+        pfConfig,
+        esiConfig,
+        otConfig,
+        declarations,
+        bonusConfigs,
+        pendingBonuses,
+        pendingArrears,
+        activeLoans,
+        attendanceRecords,
+        leaveRecord,
+        ytdData,
+        _roundingLoaded
+      ] = await Promise.all([
+        timePromise('employee', prisma.employee.findUnique({ where: { id: employeeId } })),
+        timePromise('salaryAssignment', this.configLoader.loadEmployeeSalary(employeeId)),
+        timePromise('fyRecord', prisma.payrollFinancialYear.findFirst({
+          where: {
+            organizationId: organizationId,
+            name: { in: [financialYear, `FY ${financialYear}`] }
+          }
+        })),
+        timePromise('componentMasters', this.configLoader.loadComponentMasters()),
+        timePromise('pfConfig', this.configLoader.loadPFConfig()),
+        timePromise('esiConfig', this.configLoader.loadESIConfig()),
+        timePromise('otConfig', this.configLoader.loadOTConfig()),
+        timePromise('declarations', this.configLoader.loadInvestmentDeclarations(employeeId)),
+        timePromise('bonusConfigs', this.configLoader.loadBonusConfigs()),
+        timePromise('pendingBonuses', this.configLoader.loadPendingBonuses(employeeId, month, year)),
+        timePromise('pendingArrears', this.configLoader.loadPendingArrears(employeeId)),
+        timePromise('activeLoans', this.configLoader.loadActiveLoans(employeeId)),
+        timePromise('attendanceRecords', this.configLoader.loadAttendance(employeeId, month, year)),
+        timePromise('leaveRecord', this.configLoader.loadLeaveRecord(employeeId, month, year)),
+        timePromise('ytdData', this.ytdTracker.getYTD(employeeId, month, year).catch(err => {
+          console.error('[PayrollEngine] YTD lookup failed during prefetch:', err);
+          return { ytdGross: 0, ytdTDS: 0, monthsProcessed: 0 };
+        })),
+        timePromise('roundingConfig', this.roundingEngine.loadConfig(organizationId))
+      ]);
+
+      if (!rawEmployee) {
+        throw new Error(`Employee not found: ${employeeId}`);
+      }
+
+      const employee = rawEmployee;
+
+      // ── PHASE 2: DEPENDENT PREFETCHING (Requires Employee record details) ──
+      const workState = rawEmployee.workState || 'Maharashtra';
+      const taxRegime = rawEmployee.taxRegime?.toUpperCase() === 'OLD' ? 'OLD' : 'NEW';
+
+      const [
+        ptSlabs,
+        lwfConfig,
+        holidays,
+        workingDays,
+        taxSlabs,
+        taxSections
+      ] = await Promise.all([
+        this.configLoader.loadPTSlabs(workState),
+        this.configLoader.loadLWFConfig(workState),
+        this.configLoader.loadHolidays(employeeId, rawEmployee, month, year),
+        this.configLoader.loadWorkingDays(rawEmployee),
+        this.configLoader.loadTaxSlabs(taxRegime, financialYear),
+        this.configLoader.loadTaxSections(taxRegime)
+      ]);
+
       // ═══════════════════════════════════════════════════════
       // STEP 1: LOAD EMPLOYEE
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(1, 'LOAD_EMPLOYEE');
-      const employee = await prisma.employee.findUnique({
-        where: { id: employeeId },
-      });
-
-      if (!employee) {
-        throw new Error(`Employee not found: ${employeeId}`);
-      }
 
       result.employee = {
-        id: employee.id,
-        employeeId: employee.employeeId,
-        name: `${employee.firstName} ${employee.lastName}`,
-        department: employee.department,
-        designation: employee.designation,
-        dateOfJoining: employee.dateOfJoining,
-        workState: employee.workState || 'Maharashtra',
-        pfApplicable: employee.pfApplicable === 'yes',
-        esicApplicable: employee.esicApplicable === 'yes',
-        taxRegime: employee.taxRegime || 'new',
-        organizationId: employee.organizationId,
+        id: rawEmployee.id,
+        employeeId: rawEmployee.employeeId,
+        name: `${rawEmployee.firstName} ${rawEmployee.lastName}`,
+        department: rawEmployee.department,
+        designation: rawEmployee.designation,
+        dateOfJoining: rawEmployee.dateOfJoining,
+        workState: rawEmployee.workState || 'Maharashtra',
+        pfApplicable: rawEmployee.pfApplicable === 'yes',
+        esicApplicable: rawEmployee.esicApplicable === 'yes',
+        taxRegime: rawEmployee.taxRegime || 'new',
+        organizationId: rawEmployee.organizationId,
+        hraApplicable: rawEmployee.hraApplicable !== 'no',
       };
 
       this.logger.log(1, 'LOAD_EMPLOYEE', null,
-        `Loaded: ${result.employee.name} (${employee.employeeId})`,
-        { employeeId: employee.id },
+        `Loaded: ${result.employee.name} (${rawEmployee.employeeId})`,
+        { employeeId: rawEmployee.id },
         null, result.employee
       );
 
@@ -238,11 +310,10 @@ export class PayrollCalculationEngine {
       // STEP 2: LOAD SALARY STRUCTURE
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(2, 'LOAD_SALARY_STRUCTURE');
-      const salaryAssignment = await this.configLoader.loadEmployeeSalary(employeeId);
 
-      if (!salaryAssignment) {
-        // Fallback to employee.payslipStructure if no V2 assignment
-        const legacyStructure = employee.payslipStructure;
+      if (!rawSalaryAssignment) {
+        // Fallback to rawEmployee.payslipStructure if no V2 assignment
+        const legacyStructure = rawEmployee.payslipStructure;
         if (legacyStructure) {
           result.salaryAssignment = {
             ctc: (legacyStructure.grossSalary || 0) * 12,
@@ -256,12 +327,12 @@ export class PayrollCalculationEngine {
         }
       } else {
         result.salaryAssignment = {
-          id: salaryAssignment.id,
-          ctc: salaryAssignment.ctc,
-          basicSalary: salaryAssignment.basicSalary,
-          grossSalary: salaryAssignment.grossSalary,
-          componentValues: salaryAssignment.componentValues || {},
-          templateName: salaryAssignment.template?.name,
+          id: rawSalaryAssignment.id,
+          ctc: rawSalaryAssignment.ctc,
+          basicSalary: rawSalaryAssignment.basicSalary,
+          grossSalary: rawSalaryAssignment.grossSalary,
+          componentValues: rawSalaryAssignment.componentValues || {},
+          templateName: rawSalaryAssignment.template?.name,
           isLegacy: false,
         };
       }
@@ -281,18 +352,9 @@ export class PayrollCalculationEngine {
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(3, 'LOAD_PAYROLL_MONTH');
       const totalDaysInMonth = new Date(year, month, 0).getDate();
-      const financialYear = this.configLoader.getFinancialYear(month, year);
       const remainingMonths = this.configLoader.getRemainingMonths(month, year);
 
-      // Fix #10: Check if financial year is locked
-      const fyRecord = await prisma.payrollFinancialYear.findFirst({
-        where: {
-          organizationId: organizationId,
-          name: {
-            in: [financialYear, `FY ${financialYear}`]
-          }
-        }
-      });
+      // Check if financial year is locked using prefetched fyRecord
       if (fyRecord && fyRecord.isLocked) {
         throw new Error(`Cannot run calculation: Financial Year ${financialYear} is locked.`);
       }
@@ -307,10 +369,6 @@ export class PayrollCalculationEngine {
       // STEP 4: LOAD ATTENDANCE
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(4, 'LOAD_ATTENDANCE');
-      const attendanceRecords = await this.configLoader.loadAttendance(employeeId, month, year);
-      const leaveRecord = await this.configLoader.loadLeaveRecord(employeeId, month, year);
-      const holidays = await this.configLoader.loadHolidays(employeeId, employee, month, year);
-      const workingDays = await this.configLoader.loadWorkingDays(employee);
 
       result.attendance = this.attendanceEngine.processAttendance(
         attendanceRecords, leaveRecord, holidays, month, year, workingDays
@@ -335,7 +393,6 @@ export class PayrollCalculationEngine {
       // STEP 5: LOAD PAYROLL RULES (Component Formulas)
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(5, 'LOAD_PAYROLL_RULES');
-      const componentMasters = await this.configLoader.loadComponentMasters();
 
       this.logger.log(5, 'LOAD_PAYROLL_RULES', null,
         `Loaded ${componentMasters.length} component formulas`,
@@ -347,11 +404,6 @@ export class PayrollCalculationEngine {
       // STEP 6: LOAD STATUTORY RULES
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(6, 'LOAD_STATUTORY_RULES');
-      const pfConfig = await this.configLoader.loadPFConfig();
-      const esiConfig = await this.configLoader.loadESIConfig();
-      const ptSlabs = await this.configLoader.loadPTSlabs(result.employee.workState);
-      const lwfConfig = await this.configLoader.loadLWFConfig(result.employee.workState);
-      const otConfig = await this.configLoader.loadOTConfig();
 
       this.logger.log(6, 'LOAD_STATUTORY_RULES', null,
         `PF Ceiling: ₹${pfConfig.pfCeiling}, ESI Threshold: ₹${esiConfig.grossThreshold}, PT Slabs: ${ptSlabs.length}, LWF: ${lwfConfig ? 'Yes' : 'No'}`,
@@ -363,10 +415,6 @@ export class PayrollCalculationEngine {
       // STEP 7: LOAD TAX RULES
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(7, 'LOAD_TAX_RULES');
-      const taxRegime = result.employee.taxRegime?.toUpperCase() === 'OLD' ? 'OLD' : 'NEW';
-      const taxSlabs = await this.configLoader.loadTaxSlabs(taxRegime, financialYear);
-      const taxSections = await this.configLoader.loadTaxSections(taxRegime);
-      const declarations = await this.configLoader.loadInvestmentDeclarations(employeeId);
 
       // Convert declarations to lookup map
       const declarationMap = {};
@@ -478,6 +526,16 @@ export class PayrollCalculationEngine {
                 const basicVal = earningsBreakdown['BASIC'] || result.salaryAssignment.basicSalary || 0;
                 value = (basicVal * percentage) / 100;
                 formulaDescription = `Admin Custom: Basic(${basicVal}) × ${percentage}% = ${value}`;
+              } else if (customConfig.calculationType === 'metro') {
+                const metroRate = taxSections?.find(s => s.sectionCode === 'HRA_METRO_RATE')?.maxLimit || 50;
+                const basicVal = earningsBreakdown['BASIC'] || result.salaryAssignment.basicSalary || 0;
+                value = (basicVal * metroRate) / 100;
+                formulaDescription = `Admin Custom (Metro): Basic(${basicVal}) × ${metroRate}% = ${value}`;
+              } else if (customConfig.calculationType === 'non_metro') {
+                const nonMetroRate = taxSections?.find(s => s.sectionCode === 'HRA_NON_METRO_RATE')?.maxLimit || 40;
+                const basicVal = earningsBreakdown['BASIC'] || result.salaryAssignment.basicSalary || 0;
+                value = (basicVal * nonMetroRate) / 100;
+                formulaDescription = `Admin Custom (Non-Metro): Basic(${basicVal}) × ${nonMetroRate}% = ${value}`;
               } else {
                 value = Number(customConfig.fixedAmount || 0);
                 formulaDescription = `Admin Custom: Fixed = ${value}`;
@@ -538,9 +596,7 @@ export class PayrollCalculationEngine {
       // Update context with prorated values
       this.formulaEngine.setContext(result.proratedEarnings);
 
-      // ── Bonus ──
-      const bonusConfigs = await this.configLoader.loadBonusConfigs();
-      const pendingBonuses = await this.configLoader.loadPendingBonuses(employeeId, month, year);
+      // ── Bonus (prefetched in Phase 1) ──
       const configBonus = this.bonusEngine.calculateFromConfig(bonusConfigs, result.proratedEarnings, result.salaryAssignment.grossSalary);
       const pendingBonus = this.bonusEngine.calculateFromPending(pendingBonuses);
       result.bonusAmount = this.roundingEngine.salary(
@@ -548,7 +604,7 @@ export class PayrollCalculationEngine {
       );
       result.bonusBreakdown = { config: configBonus, pending: pendingBonus };
 
-      // ── Overtime ──
+      // ── Overtime (prefetched in Phase 1/2) ──
       const otResult = this.overtimeEngine.calculate(otConfig, result.proratedEarnings, result.attendance.overtimeHours);
       result.overtimeAmount = otResult.otAmount;
       result.overtimeBreakdown = otResult;
@@ -563,8 +619,7 @@ export class PayrollCalculationEngine {
       result.leaveEncashment = leResult.encashmentAmount;
       result.leaveEncashmentBreakdown = leResult;
 
-      // ── Arrears ──
-      const pendingArrears = await this.configLoader.loadPendingArrears(employeeId);
+      // ── Arrears (prefetched in Phase 1) ──
       const arrearResult = this.arrearEngine.calculate(pendingArrears);
       result.arrearAmount = arrearResult.totalArrear;
       result.arrearBreakdown = arrearResult;
@@ -658,18 +713,12 @@ export class PayrollCalculationEngine {
       declarationMap['BASIC_ANNUAL'] = (result.proratedEarnings?.BASIC || result.salaryAssignment?.basicSalary || 0) * 12;
       declarationMap['HRA_ANNUAL'] = (result.proratedEarnings?.HRA || result.salaryAssignment?.componentValues?.HRA || 0) * 12;
 
-      // Fix #9: Auto-calculate YTD from previous payslips
-      let ytdData = { ytdGross: 0, ytdTDS: 0, monthsProcessed: 0 };
-      try {
-        ytdData = await this.ytdTracker.getYTD(employeeId, month, year);
-        this.logger.log(11, 'CALCULATE_TAX', 'YTD_LOOKUP',
-          `YTD from ${ytdData.monthsProcessed} previous months: Gross=₹${ytdData.ytdGross}, TDS=₹${ytdData.ytdTDS}`,
-          { monthsProcessed: ytdData.monthsProcessed },
-          ytdData.ytdTDS
-        );
-      } catch (ytdErr) {
-        this.logger.logError(11, 'CALCULATE_TAX', 'YTD_LOOKUP', ytdErr);
-      }
+      // Fix #9: Auto-calculate YTD from previous payslips (prefetched in Phase 1)
+      this.logger.log(11, 'CALCULATE_TAX', 'YTD_LOOKUP',
+        `YTD from ${ytdData.monthsProcessed} previous months: Gross=₹${ytdData.ytdGross}, TDS=₹${ytdData.ytdTDS}`,
+        { monthsProcessed: ytdData.monthsProcessed },
+        ytdData.ytdTDS
+      );
 
       // Use manual overrides if provided, otherwise use auto-calculated YTD
       const effectiveYtdTDS = overrides.ytdTDS !== undefined ? Number(overrides.ytdTDS) : ytdData.ytdTDS;
@@ -687,6 +736,7 @@ export class PayrollCalculationEngine {
         previousEmployerTDS: Number(overrides.previousEmployerTDS || 0),
         ytdTDS: effectiveYtdTDS,
         ytdGross: effectiveYtdGross,
+        hraApplicable: result.employee.hraApplicable,
       });
       result.monthlyTDS = result.taxBreakdown.monthlyTDS;
       result.ytdData = ytdData; // Attach for inspection
@@ -696,9 +746,8 @@ export class PayrollCalculationEngine {
       // ═══════════════════════════════════════════════════════
       this.logger.startStep(12, 'CALCULATE_OTHER_DEDUCTIONS');
 
-      // Loan Recovery
-      const activeLoans = await this.configLoader.loadActiveLoans(employeeId);
-      result.loanBreakdown = this.loanEngine.calculate(activeLoans);
+      // Loan Recovery (prefetched in Phase 1)
+      result.loanBreakdown = this.loanEngine.calculate(activeLoans, month, year);
       result.loanRecovery = result.loanBreakdown.totalLoanRecovery;
       result.advanceRecovery = result.loanBreakdown.totalAdvanceRecovery;
 

@@ -21,6 +21,7 @@ export class ConfigLoader {
   constructor(organizationId, effectiveDate = new Date()) {
     this.organizationId = organizationId;
     this.effectiveDate = effectiveDate;
+    this.cache = new Map();
   }
 
   /**
@@ -62,6 +63,9 @@ export class ConfigLoader {
    * Returns components sorted by dependency order (dependsOn resolved)
    */
   async loadComponentMasters() {
+    const cacheKey = 'componentMasters';
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const components = await prisma.payrollComponentMaster.findMany({
       where: {
         isActive: true,
@@ -84,7 +88,9 @@ export class ConfigLoader {
     }
 
     // Topological sort by dependencies
-    return this._topologicalSort(Array.from(byCode.values()));
+    const sorted = this._topologicalSort(Array.from(byCode.values()));
+    this.cache.set(cacheKey, sorted);
+    return sorted;
   }
 
   /**
@@ -159,6 +165,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadPFConfig() {
+    const cacheKey = 'pfConfig';
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const config = await prisma.payrollPFConfig.findFirst({
       where: {
         isActive: true,
@@ -172,7 +181,7 @@ export class ConfigLoader {
     });
 
     // Return config or sensible defaults
-    return config || {
+    const result = config || {
       pfWageComponents: ['BASIC', 'DA'],
       pfCeiling: 15000,
       employeePFRate: 12,
@@ -182,6 +191,9 @@ export class ConfigLoader {
       edliRate: 0.5,
       restrictToCeiling: true,
     };
+
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -189,6 +201,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadESIConfig() {
+    const cacheKey = 'esiConfig';
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const config = await prisma.payrollESIConfig.findFirst({
       where: {
         isActive: true,
@@ -201,11 +216,14 @@ export class ConfigLoader {
       orderBy: { effectiveFrom: 'desc' },
     });
 
-    return config || {
+    const result = config || {
       grossThreshold: 21000,
       employeeRate: 0.75,
       employerRate: 3.25,
     };
+
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -213,6 +231,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadPTSlabs(state) {
+    const cacheKey = `ptSlabs:${state}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const slabs = await prisma.payrollPTSlabConfig.findMany({
       where: {
         isActive: true,
@@ -226,6 +247,7 @@ export class ConfigLoader {
       orderBy: { slabFrom: 'asc' },
     });
 
+    this.cache.set(cacheKey, slabs);
     return slabs;
   }
 
@@ -234,6 +256,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadLWFConfig(state) {
+    const cacheKey = `lwfConfig:${state}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const config = await prisma.payrollLWFConfig.findFirst({
       where: {
         isActive: true,
@@ -247,6 +272,7 @@ export class ConfigLoader {
       orderBy: { effectiveFrom: 'desc' },
     });
 
+    this.cache.set(cacheKey, config);
     return config;
   }
 
@@ -255,6 +281,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadTaxSlabs(regime, financialYear) {
+    const cacheKey = `taxSlabs:${regime}:${financialYear}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     console.log(`loadTaxSlabs called with: regime=${regime}, financialYear=${financialYear}`);
     const slabs = await prisma.payrollTaxSlabConfig.findMany({
       where: {
@@ -270,6 +299,8 @@ export class ConfigLoader {
       orderBy: { slabFrom: 'asc' },
     });
     console.log(`loadTaxSlabs returned ${slabs.length} slabs`);
+    
+    this.cache.set(cacheKey, slabs);
     return slabs;
   }
 
@@ -278,6 +309,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadTaxSections(regime) {
+    const cacheKey = `taxSections:${regime}`;
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const sections = await prisma.payrollTaxSectionConfig.findMany({
       where: {
         isActive: true,
@@ -290,6 +324,7 @@ export class ConfigLoader {
       },
     });
 
+    this.cache.set(cacheKey, sections);
     return sections;
   }
 
@@ -317,6 +352,9 @@ export class ConfigLoader {
   // ─────────────────────────────────────────────────────────
 
   async loadOTConfig() {
+    const cacheKey = 'otConfig';
+    if (this.cache.has(cacheKey)) return this.cache.get(cacheKey);
+
     const config = await prisma.payrollOTConfig.findFirst({
       where: {
         isActive: true,
@@ -329,13 +367,16 @@ export class ConfigLoader {
       orderBy: { effectiveFrom: 'desc' },
     });
 
-    return config || {
+    const result = config || {
       baseSalaryComponents: ['BASIC'],
       workingDaysPerMonth: 26,
       workingHoursPerDay: 8,
       otMultiplier: 2,
       maxOTHoursPerMonth: null,
     };
+
+    this.cache.set(cacheKey, result);
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────
@@ -407,7 +448,7 @@ export class ConfigLoader {
     return prisma.loan.findMany({
       where: {
         employeeId,
-        status: 'Active',
+        status: { in: ['Active', 'Approved'] },
       },
     });
   }
@@ -482,27 +523,27 @@ export class ConfigLoader {
     const holidayListId = employee.holidayListId;
     const orgId = employee.organizationId;
 
-    // Fetch regular holidays
-    const regularHolidays = await prisma.holiday.findMany({
-      where: {
-        status: 'Active',
-        date: { gte: startDate, lte: endDate },
-        isRestricted: false,
-        OR: holidayListId
-          ? [{ holidayListId }]
-          : [{ organizationId: orgId }],
-      },
-    });
-
-    // Fetch approved restricted holiday claims for this employee in this month
     try {
-      const claims = await prisma.restrictedHolidayClaim.findMany({
-        where: {
-          employeeId: employeeId,
-          status: 'Approved',
-          year: year
-        }
-      });
+      // Fetch regular holidays and approved restricted claims in parallel
+      const [regularHolidays, claims] = await Promise.all([
+        prisma.holiday.findMany({
+          where: {
+            status: 'Active',
+            date: { gte: startDate, lte: endDate },
+            isRestricted: false,
+            OR: holidayListId
+              ? [{ holidayListId }]
+              : [{ organizationId: orgId }],
+          },
+        }),
+        prisma.restrictedHolidayClaim.findMany({
+          where: {
+            employeeId: employeeId,
+            status: 'Approved',
+            year: year
+          }
+        })
+      ]);
 
       if (claims.length > 0) {
         const claimHolidayIds = claims.map(c => c.holidayId).filter(Boolean);
@@ -517,11 +558,12 @@ export class ConfigLoader {
 
         return [...regularHolidays, ...claimedHolidays];
       }
-    } catch (err) {
-      console.error("Failed to load claimed restricted holidays:", err);
-    }
 
-    return regularHolidays;
+      return regularHolidays;
+    } catch (err) {
+      console.error("Failed to load holidays:", err);
+      return [];
+    }
   }
 
   // ─────────────────────────────────────────────────────────

@@ -278,7 +278,8 @@ export default function PayrollMasterPortal() {
           pfApplicable: selectedEmp.pfApplicable,
           esicApplicable: selectedEmp.esicApplicable,
           isTDSApplicable: selectedEmp.isTDSApplicable,
-          gratuityApplicable: selectedEmp.gratuityApplicable
+          gratuityApplicable: selectedEmp.gratuityApplicable,
+          hraApplicable: selectedEmp.hraApplicable
         })
       });
       

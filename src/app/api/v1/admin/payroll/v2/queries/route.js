@@ -22,11 +22,13 @@ export async function GET(request) {
     const status = searchParams.get('status');
     const category = searchParams.get('category');
     const priority = searchParams.get('priority');
+    const employeeId = searchParams.get('employeeId');
 
     const where = { organizationId: orgId };
     if (status) where.status = status;
     if (category) where.category = category;
     if (priority) where.priority = priority;
+    if (employeeId) where.employeeId = employeeId;
 
     const queries = await prisma.payrollQuery.findMany({
       where,

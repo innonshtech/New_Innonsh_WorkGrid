@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/db/prisma';
 import { getAuthUser, authorize } from "@/lib/auth-util";
-import { PayrollCalculationEngine } from "@/lib/payroll/engines";
+import { PayrollCalculationEngine, ConfigLoader } from "@/lib/payroll/engines";
 import { WorkflowEngine } from "@/lib/payroll/engines/workflow-engine";
 
 // ==========================================
@@ -132,6 +132,8 @@ async function handleCalculateRun(request, id, authUser, preBody = null) {
 
   const calculationLogs = [];
 
+  const sharedConfigLoader = new ConfigLoader(run.organizationId, new Date(run.year, run.month - 1, 15));
+
   // Fix #2: Process in parallel batches of 5
   const BATCH_SIZE = 5;
   for (let i = 0; i < employeeRecords.length; i += BATCH_SIZE) {
@@ -146,7 +148,8 @@ async function handleCalculateRun(request, id, authUser, preBody = null) {
           year: run.year,
           organizationId: run.organizationId,
           payrollRunId: run.id,
-          calculatedById: authUser.id
+          calculatedById: authUser.id,
+          configLoader: sharedConfigLoader
         });
         return { record, result };
       })

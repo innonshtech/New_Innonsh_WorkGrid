@@ -347,15 +347,53 @@ export class WorkflowEngine {
       } else if (entityType === 'LOAN') {
         const loanStatusMap = {
           'PENDING_APPROVAL': details.role === 'FINANCE' ? 'FinanceApproved' : details.role === 'HR' ? 'HRApproved' : 'ManagerApproved',
-          'APPROVED': 'Active',
+          'APPROVED': 'Approved',
           'REJECTED': 'Rejected'
         };
-        await prisma.payrollLoanApplication.update({
-          where: { id: entityId },
-          data: {
-            status: loanStatusMap[status] || 'Applied'
+        const mappedStatus = loanStatusMap[status] || 'Applied';
+        
+        if (status === 'APPROVED') {
+          const loan = await prisma.loan.findUnique({ where: { id: entityId } });
+          if (loan) {
+            const loanData = loan.loanData && typeof loan.loanData === 'object' ? loan.loanData : {};
+            loanData.status = 'Approved';
+            loanData.approvalDate = new Date().toISOString();
+            
+            const installments = Number(loanData.installments || 1);
+            const amount = loan.amount || loanData.amount || 0;
+            const installmentAmount = Math.round(amount / installments);
+            
+            if (!loanData.repaymentSchedule || loanData.repaymentSchedule.length === 0) {
+              const schedule = [];
+              const startDate = new Date();
+              for (let i = 1; i <= installments; i++) {
+                const dueDate = new Date(startDate.getFullYear(), startDate.getMonth() + i, 10);
+                schedule.push({
+                  dueDate: dueDate.toISOString(),
+                  amount: i === installments ? (amount - (installmentAmount * (i - 1))) : installmentAmount,
+                  status: "Pending"
+                });
+              }
+              loanData.repaymentSchedule = schedule;
+            }
+            
+            await prisma.loan.update({
+              where: { id: entityId },
+              data: {
+                status: 'Approved',
+                emi: installmentAmount,
+                loanData
+              }
+            });
           }
-        });
+        } else {
+          await prisma.loan.update({
+            where: { id: entityId },
+            data: {
+              status: mappedStatus
+            }
+          });
+        }
       } else if (entityType === 'REIMBURSEMENT') {
         await prisma.payrollReimbursement.update({
           where: { id: entityId },
@@ -391,7 +429,7 @@ export class WorkflowEngine {
       if (entityType === 'PAYROLL_RUN') {
         return prisma.payrollRunV2.findUnique({ where: { id: entityId } });
       } else if (entityType === 'LOAN') {
-        return prisma.payrollLoanApplication.findUnique({
+        return prisma.loan.findUnique({
           where: { id: entityId },
           include: { employee: true }
         });

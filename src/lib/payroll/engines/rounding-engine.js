@@ -36,34 +36,28 @@ export class RoundingEngine {
    */
   async loadConfig(organizationId) {
     try {
+      const conditions = [{ organizationId: null }];
+      if (organizationId) conditions.push({ organizationId });
+
       const configs = await prisma.payrollRoundingConfig.findMany({
         where: {
-          organizationId: organizationId || null,
+          OR: conditions,
           isActive: true,
         },
       });
 
-      for (const config of configs) {
+      // Sort configs: global (null) first, org-specific next, so org-specific overrides global
+      const sortedConfigs = [...configs].sort((a, b) => {
+        if (a.organizationId === null && b.organizationId !== null) return -1;
+        if (a.organizationId !== null && b.organizationId === null) return 1;
+        return 0;
+      });
+
+      for (const config of sortedConfigs) {
         this._rules[config.componentType] = {
           method: config.roundingMethod,
           decimalPlaces: config.decimalPlaces,
         };
-      }
-
-      // If org-specific not found, try global (organizationId = null)
-      if (configs.length === 0 && organizationId) {
-        const globalConfigs = await prisma.payrollRoundingConfig.findMany({
-          where: {
-            organizationId: null,
-            isActive: true,
-          },
-        });
-        for (const config of globalConfigs) {
-          this._rules[config.componentType] = {
-            method: config.roundingMethod,
-            decimalPlaces: config.decimalPlaces,
-          };
-        }
       }
 
       this._loaded = true;

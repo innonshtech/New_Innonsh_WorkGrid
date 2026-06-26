@@ -99,7 +99,8 @@ export class Form16Engine {
       declarations: declarationsMap,
       previousEmployerTDS: 0,
       ytdTDS: ytdTDS,
-      ytdGross: ytdGross
+      ytdGross: ytdGross,
+      hraApplicable: emp.hraApplicable !== 'no',
     });
 
     return {

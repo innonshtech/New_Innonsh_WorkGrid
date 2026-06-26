@@ -255,6 +255,7 @@ export async function POST(request) {
     if (body.esicApplicable !== undefined) employeeDataToUpdate.esicApplicable = body.esicApplicable;
     if (body.isTDSApplicable !== undefined) employeeDataToUpdate.isTDSApplicable = body.isTDSApplicable;
     if (body.gratuityApplicable !== undefined) employeeDataToUpdate.gratuityApplicable = body.gratuityApplicable;
+    if (body.hraApplicable !== undefined) employeeDataToUpdate.hraApplicable = body.hraApplicable;
 
     await prisma.employee.update({
       where: { id: employeeId },
