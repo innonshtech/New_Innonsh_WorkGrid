@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, ChevronRight, Save, RotateCw, Info, TrendingUp, Users } from 'lucide-react';
+import { Search, ChevronRight, Save, RotateCw, Info, TrendingUp, Users, ExternalLink, FileText, CheckCircle2, Check, Paperclip } from 'lucide-react';
 import CalculationInspector from './CalculationInspector';
 
 export default function SalaryStructures({
@@ -31,6 +31,80 @@ export default function SalaryStructures({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDept, setSelectedDept] = useState("");
   const [inspectingTab, setInspectingTab] = useState('structure');
+  
+  // Uploaded docs state
+  const [uploadedDocs, setUploadedDocs] = useState([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+
+  const fetchUploadedDocs = async () => {
+    if (!selectedEmp) return;
+    const empId = selectedEmp.id || selectedEmp._id;
+    if (!empId) return;
+
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`/api/v1/admin/payroll/investments?employeeId=${empId}&financialYear=2025-26`);
+      const data = await res.json();
+      if (data && data.proofs) {
+        setUploadedDocs(data.proofs);
+      } else {
+        setUploadedDocs([]);
+      }
+    } catch (err) {
+      console.error('Failed to load employee uploaded documents:', err);
+      setUploadedDocs([]);
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const handleApproveDoc = async (proofId) => {
+    if (!selectedEmp) return;
+    const empId = selectedEmp.id || selectedEmp._id;
+    if (!empId) return;
+
+    try {
+      // 1. Fetch current declaration
+      const res = await fetch(`/api/v1/admin/payroll/investments?employeeId=${empId}&financialYear=2025-26`);
+      const data = await res.json();
+      
+      // 2. Update the status of the matching proof
+      const existingProofs = data.proofs || [];
+      const updatedProofs = existingProofs.map(p => {
+        if (p.id === proofId) {
+          return { ...p, status: 'Approved', adminRemarks: 'Approved by admin.' };
+        }
+        return p;
+      });
+
+      // 3. Save it back
+      const saveRes = await fetch('/api/v1/admin/payroll/investments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: empId,
+          financialYear: '2025-26',
+          sections: data.sections,
+          proofs: updatedProofs
+        })
+      });
+
+      const saveData = await saveRes.json();
+      if (saveData.id || saveData._id) {
+        import('sonner').then(mod => mod.toast.success('Proof document marked as verified & approved!'));
+        fetchUploadedDocs();
+      } else {
+        import('sonner').then(mod => mod.toast.error('Failed to approve document'));
+      }
+    } catch (err) {
+      import('sonner').then(mod => mod.toast.error('Error approving document'));
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchUploadedDocs();
+  }, [selectedEmp]);
   
   // Roster Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -218,12 +292,12 @@ export default function SalaryStructures({
               </div>
             </div>
 
-            {/* Section Switcher Tabs */}
             <div className="flex border-b border-slate-200 gap-6">
               {[
                 { id: 'structure', name: 'Compensation Details' },
                 { id: 'statutory', name: 'Statutory applicability' },
                 { id: 'declarations', name: 'Tax Slabs & Declarations' },
+                { id: 'uploaded-docs', name: 'Uploaded Documents' },
                 { id: 'inspector', name: 'Step-by-step math log' }
               ].map(t => (
                 <button
@@ -433,7 +507,80 @@ export default function SalaryStructures({
                   </div>
 
                   <div className="space-y-3">
-                    {masterComponents.filter(m => m.category === 'EARNING' && m.code !== 'BASIC').map(master => {
+                    {/* Fixed HRA Earning Component */}
+                    {(() => {
+                      const hraConfig = (selectedEmp.payslipStructure?.earnings || []).find(e => e.code === 'HRA');
+                      const isHraEnabled = hraConfig ? hraConfig.enabled !== false : false;
+                      const hraCalcType = hraConfig ? hraConfig.calculationType || 'fixed' : 'percentage';
+                      const hraPercentVal = hraConfig ? hraConfig.percentage || 0 : 40;
+                      const hraFixedVal = hraConfig ? hraConfig.fixedAmount || 0 : 0;
+                      
+                      const basicVal = Number(selectedEmp.payslipStructure?.basicSalary || 0);
+                      const hraCalculatedMonthly = isHraEnabled 
+                        ? (hraCalcType === 'percentage' ? (basicVal * hraPercentVal) / 100 : hraFixedVal)
+                        : 0;
+
+                      return (
+                        <div className={`p-4 border rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all duration-300 ${
+                          isHraEnabled ? 'bg-indigo-50/20 border-indigo-150' : 'bg-slate-50/50 border-slate-200 opacity-60'
+                        }`}>
+                          <div className="flex items-center space-x-3.5">
+                            <input 
+                              type="checkbox"
+                              checked={isHraEnabled}
+                              disabled={isClosed}
+                              onChange={(e) => handleToggleComponent('EARNING', 'HRA', e.target.checked, 'Home Rent Allowance (HRA)')}
+                              className="h-4.5 w-4.5 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500 cursor-pointer"
+                            />
+                            <div>
+                              <p className="font-bold text-xs text-slate-800">Home Rent Allowance (HRA)</p>
+                              <span className="text-[10px] text-slate-400 font-mono uppercase">HRA</span>
+                            </div>
+                          </div>
+
+                          {isHraEnabled && (
+                            <div className="flex flex-wrap items-center gap-4">
+                              <div className="flex items-center space-x-1.5">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Type:</label>
+                                <select 
+                                  value={hraCalcType}
+                                  disabled={isClosed}
+                                  onChange={(e) => handleUpdateComponentVal('EARNING', 'HRA', 'calculationType', e.target.value)}
+                                  className="bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none text-slate-700"
+                                >
+                                  <option value="fixed">Fixed</option>
+                                  <option value="percentage">Percentage (%) of Basic</option>
+                                </select>
+                              </div>
+
+                              <div className="flex items-center space-x-1.5 w-28">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">{hraCalcType === 'percentage' ? '%' : '₹'}:</label>
+                                <input 
+                                  type="number"
+                                  value={hraCalcType === 'percentage' ? hraPercentVal : hraFixedVal}
+                                  disabled={isClosed}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value) || 0;
+                                    handleUpdateComponentVal('EARNING', 'HRA', hraCalcType === 'percentage' ? 'percentage' : 'fixedAmount', val);
+                                  }}
+                                  className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-[11px] font-bold outline-none text-slate-800"
+                                />
+                              </div>
+
+                              <div className="text-right w-24">
+                                <span className="text-[9px] text-slate-400 uppercase block font-bold">Monthly Val</span>
+                                <span className="font-black text-indigo-600 text-xs">₹{Math.round(hraCalculatedMonthly).toLocaleString('en-IN')}</span>
+                              </div>
+                            </div>
+                          )}
+                          {!isHraEnabled && (
+                            <span className="text-slate-400 text-xs font-bold font-mono">Inactive</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {masterComponents.filter(m => m.category === 'EARNING' && m.code !== 'BASIC' && m.code !== 'HRA').map(master => {
                       const config = (selectedEmp.payslipStructure?.earnings || []).find(e => e.code === master.code);
                       const isEnabled = config ? config.enabled !== false : false;
                       const calcType = config ? config.calculationType || 'fixed' : (master.formulaType === 'PERCENTAGE' ? 'percentage' : 'fixed');
@@ -597,12 +744,13 @@ export default function SalaryStructures({
               <div className="bg-white border border-slate-200 p-8 rounded-2xl shadow-sm space-y-6 animate-in fade-in duration-200">
                 <h3 className="font-extrabold text-sm text-slate-800 pb-2 border-b border-slate-100">Statutory Scheme Applicabilities</h3>
                 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   {[
                     { label: 'PF Applicable', key: 'pfApplicable', val: 'yes' },
                     { label: 'ESIC Applicable', key: 'esicApplicable', val: 'yes' },
                     { label: 'TDS (Tax) Deductions', key: 'isTDSApplicable', val: true },
-                    { label: 'Gratuity Scheme', key: 'gratuityApplicable', val: 'yes' }
+                    { label: 'Gratuity Scheme', key: 'gratuityApplicable', val: 'yes' },
+                    { label: 'HRA Exemption', key: 'hraApplicable', val: 'yes' }
                   ].map(item => {
                     const isEnabled = selectedEmp[item.key] === item.val;
                     return (
@@ -764,6 +912,79 @@ export default function SalaryStructures({
                     <Info className="h-6 w-6 mx-auto text-slate-400" />
                     <p className="text-xs font-bold text-slate-600">Standard Regime Activated</p>
                     <p className="text-[10px] max-w-sm mx-auto leading-normal">New Tax Regime only applies standard deduction (₹75,000) and employer NPS benefits. All exemptions under 80C, 80D, and HRA are disabled.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SUB PANEL 3.5: Uploaded Proof Documents */}
+            {inspectingTab === 'uploaded-docs' && (
+              <div className="bg-white border border-slate-200 p-8 rounded-2xl shadow-sm space-y-6 animate-in fade-in duration-200 font-sans">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                  <h3 className="font-extrabold text-sm text-slate-800">Employee Uploaded Documents</h3>
+                  <span className="text-[10px] bg-slate-100 text-slate-500 font-extrabold px-2 py-0.5 rounded-full">
+                    {uploadedDocs.length} Documents
+                  </span>
+                </div>
+
+                {docsLoading ? (
+                  <p className="text-xs text-slate-400 py-8 text-center animate-pulse">Loading documents...</p>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-[500px] overflow-y-auto pr-1">
+                    {uploadedDocs.map(doc => {
+                      const displayBadge = doc.category || 'Investment';
+                      
+                      return (
+                        <div key={doc.id} className="py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs hover:bg-slate-50/10 px-2 rounded-xl transition-all">
+                          <div className="space-y-1 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 text-[9px] font-extrabold uppercase border border-indigo-150 shadow-sm">
+                                {displayBadge}
+                              </span>
+                              <span className="font-bold text-slate-850">Submitted Investment Proof</span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 font-semibold">{doc.description}</p>
+                            <span className="text-[9px] text-slate-400 block font-normal">Uploaded on {new Date(doc.submittedAt).toLocaleDateString()}</span>
+                          </div>
+
+                          <div className="flex items-center space-x-3 shrink-0">
+                            <a
+                              href={doc.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 font-bold rounded-lg transition-all flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                              <span>View Document</span>
+                            </a>
+
+                            {doc.status === 'Approved' ? (
+                              <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-250 rounded-lg font-bold flex items-center gap-1">
+                                <Check className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                <span>Approved</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={isClosed}
+                                onClick={() => handleApproveDoc(doc.id)}
+                                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg transition-all shadow-sm"
+                              >
+                                Approve Document
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {uploadedDocs.length === 0 && (
+                      <div className="flex flex-col items-center justify-center py-16 text-slate-400 space-y-2">
+                        <FileText className="h-8 w-8 text-slate-350" />
+                        <p className="font-bold text-slate-550">No documents uploaded yet</p>
+                        <p className="text-[10px] text-slate-450">Any investment proofs uploaded by the employee will appear here for verification.</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

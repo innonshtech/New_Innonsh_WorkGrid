@@ -65,12 +65,19 @@ export async function PUT(req, { params }) {
             return NextResponse.json({ message: "Unauthorized to update status" }, { status: 403 });
         }
 
+        const updatePayload = {
+            status: loan.status,
+            loanData: loanData
+        };
+        if (loan.status === "Approved") {
+            const installments = Number(loanData.installments || 1);
+            const installmentAmount = Math.round(loan.amount / installments);
+            updatePayload.emi = installmentAmount;
+        }
+
         const updatedLoan = await prisma.loan.update({
             where: { id: loan.id },
-            data: {
-                status: loan.status,
-                loanData: loanData
-            }
+            data: updatePayload
         });
 
         return NextResponse.json({ message: "Loan updated successfully", loan: { _id: updatedLoan.id, ...updatedLoan.loanData } });

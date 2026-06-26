@@ -57,7 +57,7 @@ export async function buildOrgFilter(orgId) {
  * Resolves mongoIds to UUIDs for fields on an Employee object
  * so that they match the options in UI dropdowns.
  */
-export async function normalizeEmployeeRelationIds(emp) {
+export async function normalizeEmployeeRelationIds(emp, cache = new Map()) {
     if (!emp) return emp;
 
     const updated = { ...emp };
@@ -77,12 +77,18 @@ export async function normalizeEmployeeRelationIds(emp) {
     for (const item of mappings) {
         const val = updated[item.field];
         if (val && typeof val === 'string' && val.length === 24 && !val.includes('-')) {
+            const cacheKey = `${item.model}:${val}`;
+            if (cache.has(cacheKey)) {
+                updated[item.field] = cache.get(cacheKey);
+                continue;
+            }
             try {
                 const record = await prisma[item.model].findFirst({
                     where: { mongoId: val },
                     select: { id: true }
                 });
                 if (record) {
+                    cache.set(cacheKey, record.id);
                     updated[item.field] = record.id;
                 }
             } catch (e) {
@@ -99,5 +105,6 @@ export async function normalizeEmployeeRelationIds(emp) {
  */
 export async function normalizeEmployeeRelationIdsArray(employees) {
     if (!Array.isArray(employees)) return employees;
-    return Promise.all(employees.map(normalizeEmployeeRelationIds));
+    const cache = new Map();
+    return Promise.all(employees.map(emp => normalizeEmployeeRelationIds(emp, cache)));
 }

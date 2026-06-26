@@ -55,6 +55,7 @@ export class TaxEngine {
     previousEmployerTDS = 0,
     ytdTDS = 0,
     ytdGross = 0,
+    hraApplicable = true,
   }) {
     if (this.logger) this.logger.startStep(11, 'CALCULATE_TAX');
 
@@ -101,7 +102,7 @@ export class TaxEngine {
     if (regime === 'OLD') {
       // 1. Calculate HRA Exemption if HRA rent details are present
       const hraRent = Number(declarations['HRA_RENT'] || 0);
-      if (hraRent > 0) {
+      if (hraRent > 0 && hraApplicable !== false) {
         const annualBasic = Number(declarations['BASIC_ANNUAL'] || 0);
         const annualHraReceived = Number(declarations['HRA_ANNUAL'] || 0);
         
@@ -109,9 +110,11 @@ export class TaxEngine {
         // Min of:
         // a. Actual HRA received
         // b. Rent paid - 10% of Basic
-        // c. 50% of Basic (Metro) or 40% of Basic (Non-Metro)
+        // c. Metro Rate of Basic (Metro) or Non-Metro Rate of Basic (Non-Metro)
         const isMetro = declarations['HRA_CITY'] === 'Metro';
-        const basicLimit = isMetro ? (annualBasic * 0.5) : (annualBasic * 0.4);
+        const metroRate = taxSections?.find(s => s.sectionCode === 'HRA_METRO_RATE')?.maxLimit || 50;
+        const nonMetroRate = taxSections?.find(s => s.sectionCode === 'HRA_NON_METRO_RATE')?.maxLimit || 40;
+        const basicLimit = isMetro ? (annualBasic * (metroRate / 100)) : (annualBasic * (nonMetroRate / 100));
         const rentMinusBasic = Math.max(0, hraRent - (annualBasic * 0.1));
         
         const hraExemption = Math.min(annualHraReceived, rentMinusBasic, basicLimit);

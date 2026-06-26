@@ -189,7 +189,7 @@ export async function POST(request) {
         const authUser = await getAuthUser();
         
         const body = await request.json();
-        const { employeeId, financialYear, sections, actualSubmissions, status, remark, regime, taxRegime } = body;
+        const { employeeId, financialYear, sections, actualSubmissions, status, remark, regime, taxRegime, proofs } = body;
         const selectedRegime = regime || taxRegime;
 
         if (!employeeId || !financialYear) {
@@ -248,7 +248,8 @@ export async function POST(request) {
             financialYear,
             sections: sections || existingData.sections,
             actualSubmissions: actualSubmissions || existingData.actualSubmissions,
-            remark: remark || existingData.remark
+            remark: remark || existingData.remark,
+            proofs: proofs !== undefined ? proofs : existingData.proofs
         };
 
         const targetStatus = body.submit ? 'Pending' : (status || existingDeclaration?.status || 'Draft');

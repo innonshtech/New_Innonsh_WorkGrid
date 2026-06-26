@@ -1,5 +1,6 @@
 import React from 'react';
 import { Save, Edit, Trash2, ShieldCheck } from 'lucide-react';
+import StatutoryRulesConfig from './StatutoryRulesConfig';
 
 export default function PayrollConfig({
   workflowConfigs = [],
@@ -42,9 +43,20 @@ export default function PayrollConfig({
         >
           Approval Workflows
         </button>
+        <button
+          type="button"
+          onClick={() => setConfigSubTab('statutory')}
+          className={`py-3 px-6 font-bold text-xs uppercase tracking-wider border-b-2 transition-all ${
+            configSubTab === 'statutory'
+              ? 'border-indigo-600 text-indigo-600 font-extrabold'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          Statutory & Compliance Rules
+        </button>
       </div>
 
-      {configSubTab === 'workflows' ? (
+      {configSubTab === 'workflows' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Column: Create Config */}
           <div className="bg-white border border-slate-200 p-8 rounded-2xl space-y-6 shadow-sm">
@@ -122,7 +134,13 @@ export default function PayrollConfig({
             </div>
           </div>
         </div>
-      ) : (
+      )}
+
+      {configSubTab === 'statutory' && (
+        <StatutoryRulesConfig />
+      )}
+
+      {(configSubTab === 'components' || !configSubTab) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
           {/* Left Column: Create/Edit Component */}
           <div className="lg:col-span-1 bg-white border border-slate-200 p-8 rounded-2xl space-y-6 shadow-sm h-fit">

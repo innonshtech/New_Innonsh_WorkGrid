@@ -1,0 +1,2042 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id                    String    @id @default(uuid())
+  mongoId               String?   @unique // To keep track of old MongoDB ObjectId
+  name                  String
+  email                 String    @unique
+  password              String
+  role                  String    @default("admin")
+  roleId                String?
+  permissions           String[]
+  status                String    @default("active")
+  organizationId        String?
+  companyName           String?
+  phone                 String?
+  industry              String?
+  companySize           String?
+  plan                  String    @default("trial")
+  planExpiresAt         DateTime?
+  isEmailVerified       Boolean   @default(false)
+  department            String?
+  position              String?
+  employeeId            String?   @unique
+  isActive              Boolean   @default(true)
+  sessionToken          String?
+  forgotPasswordToken   String?
+  forgotPasswordExpires DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  organization         Organization?    @relation(fields: [organizationId], references: [id])
+  createdOrganizations Organization[]   @relation("OrganizationCreator")
+  updatedOrganizations Organization[]   @relation("OrganizationUpdater")
+  helpdeskTickets      HelpdeskTicket[] @relation("AssignedTickets")
+}
+
+model Organization {
+  id                String    @id @default(uuid())
+  mongoId           String?   @unique // To keep track of old MongoDB ObjectId
+  orgId             String    @unique
+  name              String
+  description       String?
+  email             String
+  phone             String?
+  street            String?
+  status            String    @default("Active")
+  website           String?
+  memberCount       Int       @default(0)
+  established       DateTime?
+  logo              String?
+  linkedinCompanyId String?
+  createdById       String
+  updatedById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  createdBy User       @relation("OrganizationCreator", fields: [createdById], references: [id])
+  updatedBy User?      @relation("OrganizationUpdater", fields: [updatedById], references: [id])
+  users     User[]
+  employees Employee[]
+}
+
+model Employee {
+  id              String  @id @default(uuid())
+  mongoId         String? @unique
+  employeeId      String  @unique
+  password        String?
+  role            String  @default("employee")
+  roleId          String?
+  isCompliant     Boolean @default(false)
+  isTDSApplicable Boolean @default(false)
+  taxRegime       String  @default("new")
+
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String
+  bloodGroup    String?
+  dateOfJoining DateTime
+  dateOfBirth   DateTime?
+  gender        String?
+
+  department        String
+  departmentId      String?
+  employeeType      String?
+  employeeTypeId    String?
+  category          String?
+  categoryId        String?
+  organizationId    String?
+  businessUnitId    String?
+  teamId            String?
+  costCenterId      String?
+  designation       String
+  reportingManager  String?
+  teamLead          String?
+  workLocation      String?
+  assignedOfficeId  String?
+  biometricDeviceId String?
+  defaultShift      String?
+  workState         String  @default("Maharashtra")
+  holidayListId     String?
+
+  bankAccountNumber String?
+  bankName          String?
+  ifscCode          String?
+  branch            String?
+  branchAddress     String?
+  panNumber         String?
+  aadharNumber      String?
+
+  workingHr          Float?
+  otApplicable       String @default("no")
+  esicApplicable     String @default("no")
+  pfApplicable       String @default("no")
+  pfType             String @default("restricted")
+  probation          String @default("no")
+  probationDuration  Int    @default(0)
+  isAttending        String @default("no")
+  gratuityApplicable String @default("no")
+  hraApplicable      String @default("yes")
+
+  compOffBalance Float  @default(0)
+  status         String @default("Active")
+
+  createdById String?
+  updatedById String?
+
+  payslipStructure     Json?
+  variablePayStructure Json?
+  attendanceApproval   Json?
+  documents            Json?
+  address              Json?
+  temporaryAddress     Json?
+  permanentAddress     Json?
+  emergencyContact     Json?
+
+  sessionToken          String?
+  forgotPasswordToken   String?
+  forgotPasswordExpires DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization    Organization?    @relation(fields: [organizationId], references: [id])
+  attendances     Attendance[]
+  leaves          Leave[]
+  helpdeskTickets HelpdeskTicket[] @relation("EmployeeTickets")
+}
+
+model Attendance {
+  id                        String    @id @default(uuid())
+  mongoId                   String?   @unique
+  employeeId                String
+  date                      DateTime
+  checkIn                   DateTime?
+  checkOut                  DateTime?
+  totalHours                Float     @default(0)
+  status                    String    @default("Present")
+  isProxy                   Boolean   @default(false)
+  proxyDetails              Json?
+  overtimeHours             Float     @default(0)
+  dayType                   String    @default("Full")
+  workedHours               Float     @default(0)
+  notes                     String?
+  location                  Json?
+  attendanceMethod          String    @default("Web")
+  distanceFromOffice        Float?
+  isGeofenceVerified        Boolean   @default(false)
+  verificationFailureReason String?
+  ipAddress                 String?
+  deviceId                  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@index([employeeId])
+  @@index([employeeId, date])
+}
+
+model Leave {
+  id               String  @id @default(uuid())
+  mongoId          String? @unique
+  employeeId       String
+  employeeCode     String
+  employeeName     String
+  organizationId   String?
+  organizationType String
+  department       String
+  month            Int
+  year             Int
+
+  leaves             Json?
+  summary            Json?
+  annualLeaveBalance Json?
+
+  status String  @default("Draft")
+  notes  String?
+
+  createdById String?
+  updatedById String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+model HelpdeskTicket {
+  id          String  @id @default(uuid())
+  mongoId     String? @unique
+  employeeId  String
+  subject     String
+  category    String  @default("General")
+  priority    String  @default("Medium")
+  status      String  @default("Open")
+  description String
+  comments    Json?
+  assignedTo  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee     Employee @relation("EmployeeTickets", fields: [employeeId], references: [id])
+  assignedUser User?    @relation("AssignedTickets", fields: [assignedTo], references: [id])
+}
+
+model Department {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  businessUnitId String?
+  departmentName String
+  status         String   @default("Active")
+  permissions    String[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OfficeLocation {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  locationName   String
+  address        Json?
+  status         String   @default("Active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Team {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  departmentId   String?
+  teamName       String
+  name           String?
+  teamLeadId     String?
+  description    String?
+  status         String   @default("Active")
+  createdBy      String?
+  updatedBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model BusinessUnit {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  unitName       String
+  status         String   @default("Active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Designation {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  title          String
+  status         String   @default("Active")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeType {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  departmentId   String?
+  type           String
+  employeeType   String?
+  status         String   @default("Active")
+  createdBy      String?
+  updatedBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeCategory {
+  id                 String   @id @default(uuid())
+  mongoId            String?  @unique
+  organizationId     String?
+  departmentId       String?
+  employeeTypeId     String?
+  categoryName       String
+  employeeCategory   String?
+  supportedDocuments String[]
+  status             String   @default("Active")
+  createdBy          String?
+  updatedBy          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Role {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  roleName       String
+  permissions    Json?
+  status         String   @default("Active")
+  roleData       Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Permission {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  name           String   @unique
+  slug           String   @unique
+  module         String
+  description    String?
+  actions        String[]
+  createdById    String?
+  updatedById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model SalaryComponent {
+  id              String   @id @default(uuid())
+  mongoId         String?  @unique
+  name            String   @unique
+  type            String
+  calculationType String
+  percentageOf    String   @default("Basic")
+  defaultValue    Float    @default(0)
+  category        String   @default("Standard")
+  isTaxable       Boolean  @default(true)
+  isStatutory     Boolean  @default(false)
+  enabled         Boolean  @default(true)
+  description     String?
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model PayrollConfig {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  companyId  String?
+  configData Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model PayrollRun {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  month          Int
+  year           Int
+  status         String   @default("Draft")
+  processedBy    String?
+  runData        Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  payslips Payslip[]
+}
+
+model Payslip {
+  id             String  @id @default(uuid())
+  mongoId        String? @unique
+  employeeId     String
+  organizationId String
+  payrollRunId   String?
+  payslipId      String  @unique
+  month          Int
+  year           Int
+
+  basicSalary     Float
+  grossSalary     Float
+  totalDeductions Float
+  netSalary       Float
+
+  workingDays     Float
+  presentDays     Float
+  leaveDays       Float @default(0)
+  paidLeaveDays   Float @default(0)
+  unpaidLeaveDays Float @default(0)
+  overtimeHours   Float @default(0)
+  overtimeAmount  Float @default(0)
+  totalDays       Float @default(0)
+  weeklyOffs      Float @default(0)
+  halfDays        Float @default(0)
+  holidays        Float @default(0)
+  paidDays        Float @default(0)
+  lopDays         Float @default(0)
+
+  status        String    @default("Draft")
+  paymentDate   DateTime?
+  paymentMethod String?
+  notes         String?
+
+  organizationName String
+  salaryType       String
+  employeeType     String?
+
+  earnings        Json?
+  deductions      Json?
+  pfDetails       Json?
+  esicDetails     Json?
+  professionalTax Float @default(0)
+  leaveDetails    Json?
+
+  isPFApplicable   Boolean @default(false)
+  isESICApplicable Boolean @default(false)
+  isPTApplicable   Boolean @default(false)
+
+  generatedById String
+  approvedById  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payrollRun PayrollRun? @relation(fields: [payrollRunId], references: [id])
+
+  @@index([employeeId])
+  @@index([employeeId, month, year])
+}
+
+model Bonus {
+  id             String    @id @default(uuid())
+  mongoId        String?   @unique
+  employeeId     String?
+  amount         Float
+  reason         String?
+  date           DateTime?
+  status         String    @default("Pending")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  organizationId String?
+  modelData      Json?
+
+  @@index([employeeId])
+  @@index([employeeId, status])
+}
+
+model Loan {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  amount     Float
+  emi        Float?
+  status     String   @default("Active")
+  loanData   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ShiftRoster {
+  id         String    @id @default(uuid())
+  mongoId    String?   @unique
+  employeeId String?
+  date       DateTime?
+  shiftData  Json?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+model TaxCalculation {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  taxData    Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// Tasks & Talent
+model Project {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  name           String
+  description    String?
+  status         String   @default("Active")
+  projectData    Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  mongoId     String?   @unique
+  projectId   String?
+  employeeId  String?
+  title       String
+  description String?
+  status      String    @default("Pending")
+  priority    String    @default("Medium")
+  dueDate     DateTime?
+  taskData    Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Timesheet {
+  id            String    @id @default(uuid())
+  mongoId       String?   @unique
+  employeeId    String?
+  projectId     String?
+  taskId        String?
+  date          DateTime?
+  hours         Float     @default(0)
+  status        String    @default("Draft")
+  timesheetData Json?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model PerformanceGoal {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  title      String
+  status     String   @default("Active")
+  progress   Float    @default(0)
+  goalData   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Appraisal {
+  id            String   @id @default(uuid())
+  mongoId       String?  @unique
+  employeeId    String?
+  managerId     String?
+  status        String   @default("Draft")
+  appraisalData Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Skill {
+  id           String    @id @default(uuid())
+  mongoId      String?   @unique
+  employeeId   String?
+  name         String
+  category     String?
+  proficiency  Int       @default(0)
+  lastAssessed DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([employeeId, name])
+}
+
+// Recruitment & Staffing
+model JobRequisition {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  departmentId   String?
+  title          String
+  status         String   @default("Open")
+  jobData        Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Candidate {
+  id               String   @id @default(uuid())
+  mongoId          String?  @unique
+  jobRequisitionId String?
+  firstName        String
+  lastName         String
+  email            String
+  phone            String?
+  status           String   @default("New")
+  candidateData    Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model OfferLetter {
+  id          String   @id @default(uuid())
+  mongoId     String?  @unique
+  candidateId String?
+  status      String   @default("Draft")
+  offerData   Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model StaffingClient {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  name           String
+  status         String   @default("Active")
+  clientData     Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingRequirement {
+  id              String   @id @default(uuid())
+  mongoId         String?  @unique
+  clientId        String?
+  title           String
+  status          String   @default("Open")
+  requirementData Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Engagement & HR
+model ExitRequest {
+  id              String    @id @default(uuid())
+  mongoId         String?   @unique
+  employeeId      String?
+  status          String    @default("Pending")
+  resignationDate DateTime?
+  lastWorkingDate DateTime?
+  reason          String?
+  exitData        Json?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model NotificationConfig {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  configData Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Notification {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  title      String
+  message    String
+  isRead     Boolean  @default(false)
+  type       String   @default("System")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model ShoutOut {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  fromEmployeeId String?
+  toEmployeeId   String?
+  message        String
+  shoutOutData   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model PulseSurvey {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  title          String
+  status         String   @default("Active")
+  surveyData     Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// Core System
+model ActivityLog {
+  id        String   @id @default(uuid())
+  mongoId   String?  @unique
+  userId    String?
+  action    String
+  module    String
+  logData   Json?
+  createdAt DateTime @default(now())
+}
+
+model Asset {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  name           String
+  status         String   @default("Available")
+  assetData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Subscription {
+  id               String   @id @default(uuid())
+  mongoId          String?  @unique
+  organizationId   String?
+  plan             String
+  status           String   @default("Active")
+  subscriptionData Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DemoRequest {
+  id          String   @id @default(uuid())
+  mongoId     String?  @unique
+  name        String
+  email       String
+  company     String?
+  status      String   @default("New")
+  requestData Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Holiday Models
+model HolidayList {
+  id                  String   @id @default(uuid())
+  mongoId             String?  @unique
+  organizationId      String?
+  name                String
+  year                Int
+  isDefault           Boolean  @default(false)
+  applicableLocations Json?
+  status              String   @default("Active")
+  holidayListData     Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Holiday {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  holidayListId  String?
+  organizationId String?
+  name           String
+  date           DateTime
+  isRestricted   Boolean  @default(false)
+  status         String   @default("Active")
+  holidayData    Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model RestrictedHolidayClaim {
+  id         String   @id @default(uuid())
+  mongoId    String?  @unique
+  employeeId String?
+  holidayId  String?
+  year       Int
+  status     String   @default("Pending")
+  claimData  Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// --- AUTO-GENERATED PERIPHERAL MODELS ---
+
+model Assetexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CustomTemplate {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Document {
+  id               String   @id @default(uuid())
+  mongoId          String?  @unique
+  organizationId   String?
+  employeeId       String?
+  status           String?  @default("Active")
+  name             String?
+  description      String?
+  documentCategory String?
+  modelData        Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model Documentexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeCategoryexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeConfig {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeConfigexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeSubCategory {
+  id                  String   @id @default(uuid())
+  mongoId             String?  @unique
+  organizationId      String?
+  employeeId          String?
+  employeeSubCategory String?
+  employeeCategoryId  String?
+  departmentId        String?
+  employeeTypeId      String?
+  status              String?  @default("Active")
+  createdBy           String?
+  updatedBy           String?
+  modelData           Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model EmployeeSubCategoryexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmployeeTypeexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Bank {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Organizationexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Template {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Templateconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DemoRequestexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model PulseResponse {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ExitRequestexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CostCenter {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Expense {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model JournalEntry {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Vendor {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model VendorInvoice {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model FnFSettlement {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model FnFSettlementexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model HandbookDocument {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ApprovalWorkflow {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Attendanceexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AttendanceRegularization {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AttendanceThreshold {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AttendanceThresholdconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ComplianceReport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ComplianceReportexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CompOffRequest {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DocumentReminder {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model DocumentRequirement {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OvertimeRequest {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model RetroAdjustment {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model PayrollVariableInput {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model VariablePayConfig {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StatutoryConfig {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Employeeexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model EmploymentHistory {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model InvestmentDeclaration {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Leaveexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model LeaveApplication {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model LeaveApplicationexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model WorkingShift {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ProductCatalog {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ProductCatalogexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model InterviewFeedback {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model OnboardingChecklist {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingCandidate {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingCandidateconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingClientconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingRequirementconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingSubmission {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StaffingSubmissionconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model CareerPath {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Projectexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Taskexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Timesheetexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TimesheetEntry {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model TimesheetEntryexport {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Userconst {
+  id             String   @id @default(uuid())
+  mongoId        String?  @unique
+  organizationId String?
+  employeeId     String?
+  status         String?  @default("Active")
+  modelData      Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// PAYROLL MANAGEMENT SYSTEM V2 — CONFIGURATION-DRIVEN CALCULATION ENGINE
+// All rules, formulas, slabs, and percentages are stored here — NOTHING HARDCODED
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ── Salary Component Master ──
+// Defines every possible earning/deduction component and its formula
+model PayrollComponentMaster {
+  id                 String    @id @default(uuid())
+  organizationId     String?
+  code               String // e.g., "BASIC", "HRA", "DA", "SPECIAL_ALLOWANCE"
+  name               String // Display name
+  category           String // "EARNING", "DEDUCTION", "EMPLOYER_CONTRIBUTION"
+  subCategory        String? // "FIXED", "VARIABLE", "STATUTORY", "VOLUNTARY"
+  formulaType        String // "FIXED", "PERCENTAGE", "DERIVED", "CONDITIONAL", "SLAB", "CUSTOM_EXPRESSION"
+  formulaConfig      Json // The formula definition (varies by formulaType)
+  dependsOn          String[] // Component codes this formula needs (for execution ordering)
+  isTaxable          Boolean   @default(true)
+  isPartOfGross      Boolean   @default(true)
+  isPartOfCTC        Boolean   @default(true)
+  isPFWageComponent  Boolean   @default(false)
+  isESIWageComponent Boolean   @default(false)
+  displayOrder       Int       @default(0)
+  isActive           Boolean   @default(true)
+  effectiveFrom      DateTime  @default(now())
+  effectiveTo        DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([organizationId, code, effectiveFrom])
+  @@index([organizationId, isActive])
+}
+
+// ── Salary Structure Template ──
+// Groups components into a reusable salary structure
+model PayrollSalaryTemplate {
+  id             String    @id @default(uuid())
+  organizationId String?
+  name           String // e.g., "Standard CTC Structure", "Contractor Structure"
+  description    String?
+  employeeType   String? // "FULL_TIME", "CONTRACT", "HOURLY", "CONSULTANT", "FREELANCER"
+  isDefault      Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  components  PayrollTemplateComponent[]
+  assignments PayrollEmployeeSalary[]
+
+  @@index([organizationId, isActive])
+}
+
+// ── Template ↔ Component Mapping ──
+// Which components are included in a salary template, with overrides
+model PayrollTemplateComponent {
+  id              String   @id @default(uuid())
+  templateId      String
+  componentCode   String // References PayrollComponentMaster.code
+  overrideFormula Json? // Override formula for this template (null = use master)
+  isMandatory     Boolean  @default(true)
+  displayOrder    Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  template PayrollSalaryTemplate @relation(fields: [templateId], references: [id])
+
+  @@unique([templateId, componentCode])
+}
+
+// ── Employee Salary Assignment ──
+// Assigns a salary structure + CTC to an employee (effective-date based for revisions)
+model PayrollEmployeeSalary {
+  id              String    @id @default(uuid())
+  employeeId      String
+  organizationId  String?
+  templateId      String
+  ctc             Float // Annual CTC
+  basicSalary     Float // Monthly Basic
+  grossSalary     Float // Monthly Gross
+  componentValues Json // { "BASIC": 25000, "HRA": 12500, ... } — resolved values
+  effectiveFrom   DateTime
+  effectiveTo     DateTime?
+  revisionReason  String? // "Joining", "Annual Revision", "Promotion"
+  revisionLetter  String? // URL to revision letter
+  status          String    @default("Active") // Active, Superseded, Draft
+  approvedById    String?
+  createdById     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  template PayrollSalaryTemplate @relation(fields: [templateId], references: [id])
+
+  @@index([employeeId, status])
+  @@index([organizationId])
+}
+
+// ── PF Configuration ──
+model PayrollPFConfig {
+  id                String    @id @default(uuid())
+  organizationId    String?
+  pfWageComponents  String[] // ["BASIC", "DA"] — which components make PF wage
+  pfCeiling         Float     @default(15000)
+  employeePFRate    Float     @default(12)
+  employerPFRate    Float     @default(12)
+  epsRate           Float     @default(8.33)
+  adminChargeRate   Float     @default(0.5)
+  edliRate          Float     @default(0.5)
+  restrictToCeiling Boolean   @default(true) // If false, PF on full wage (voluntary)
+  isActive          Boolean   @default(true)
+  effectiveFrom     DateTime  @default(now())
+  effectiveTo       DateTime?
+  createdById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── ESI Configuration ──
+model PayrollESIConfig {
+  id             String    @id @default(uuid())
+  organizationId String?
+  grossThreshold Float     @default(21000) // ESI applicable if gross <= threshold
+  employeeRate   Float     @default(0.75)
+  employerRate   Float     @default(3.25)
+  isActive       Boolean   @default(true)
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Professional Tax Slab Configuration ──
+model PayrollPTSlabConfig {
+  id             String    @id @default(uuid())
+  organizationId String?
+  state          String // "Maharashtra", "Karnataka", etc.
+  slabFrom       Float // Gross salary range start
+  slabTo         Float // Gross salary range end (use 99999999 for no upper limit)
+  amount         Float // PT amount for this slab
+  monthOverrides Json? // { "2": 300 } — February special for Maharashtra
+  isActive       Boolean   @default(true)
+  effectiveFrom  DateTime  @default(now())
+  effectiveTo    DateTime?
+  createdById    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([organizationId, state, isActive])
+}
+
+// ── LWF Configuration ──
+model PayrollLWFConfig {
+  id               String    @id @default(uuid())
+  organizationId   String?
+  state            String
+  employeeAmount   Float
+  employerAmount   Float
+  frequency        String    @default("HALF_YEARLY") // "MONTHLY", "HALF_YEARLY", "YEARLY"
+  applicableMonths Int[] // e.g., [6, 12] for half-yearly in June & December
+  isActive         Boolean   @default(true)
+  effectiveFrom    DateTime  @default(now())
+  effectiveTo      DateTime?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([organizationId, state, isActive])
+}
+
+// ── Tax Slab Configuration (Old & New Regime) ──
+model PayrollTaxSlabConfig {
+  id                 String   @id @default(uuid())
+  organizationId     String?
+  regime             String // "OLD", "NEW"
+  financialYear      String // "2025-26"
+  slabFrom           Float
+  slabTo             Float // Use 99999999 for highest slab
+  rate               Float // Tax rate percentage
+  surchargeThreshold Float? // Income above which surcharge applies
+  surchargeRate      Float    @default(0)
+  cessRate           Float    @default(4) // Health & Education Cess
+  isActive           Boolean  @default(true)
+  effectiveFrom      DateTime @default(now())
+  createdById        String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([organizationId, regime, financialYear, isActive])
+}
+
+// ── Tax Exemption Sections (80C, 80D, HRA, etc.) ──
+model PayrollTaxSectionConfig {
+  id               String   @id @default(uuid())
+  organizationId   String?
+  sectionCode      String // "80C", "80D", "80CCD_1B", "80E", "80G", "HRA", "STANDARD_DEDUCTION"
+  name             String
+  maxLimit         Float // Maximum deduction limit
+  applicableRegime String // "OLD", "NEW", "BOTH"
+  isActive         Boolean  @default(true)
+  effectiveFrom    DateTime @default(now())
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([organizationId, applicableRegime, isActive])
+}
+
+// ── Bonus Configuration ──
+model PayrollBonusConfig {
+  id                 String    @id @default(uuid())
+  organizationId     String?
+  bonusType          String // "MONTHLY", "QUARTERLY", "YEARLY", "PERFORMANCE", "FESTIVAL"
+  name               String
+  calculationMethod  String // "FLAT", "PERCENTAGE_BASIC", "PERCENTAGE_GROSS", "CUSTOM"
+  percentage         Float?
+  flatAmount         Float?
+  eligibleComponents String[] // Component codes that form eligible salary
+  isActive           Boolean   @default(true)
+  effectiveFrom      DateTime  @default(now())
+  effectiveTo        DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([organizationId, bonusType, isActive])
+}
+
+// ── Overtime Configuration ──
+model PayrollOTConfig {
+  id                   String    @id @default(uuid())
+  organizationId       String?
+  baseSalaryComponents String[] // Components to calculate hourly rate from
+  workingDaysPerMonth  Int       @default(26)
+  workingHoursPerDay   Float     @default(8)
+  otMultiplier         Float     @default(2) // 2x for double OT
+  maxOTHoursPerMonth   Float? // Cap on OT hours
+  isActive             Boolean   @default(true)
+  effectiveFrom        DateTime  @default(now())
+  effectiveTo          DateTime?
+  createdById          String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Gratuity Configuration ──
+model PayrollGratuityConfig {
+  id                 String    @id @default(uuid())
+  organizationId     String?
+  minServiceYears    Int       @default(5)
+  daysPerYear        Int       @default(15)
+  divisor            Int       @default(26)
+  maxAmount          Float? // Government cap
+  eligibleComponents String[] // ["BASIC", "DA"]
+  isActive           Boolean   @default(true)
+  effectiveFrom      DateTime  @default(now())
+  effectiveTo        DateTime?
+  createdById        String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Rounding Configuration ──
+model PayrollRoundingConfig {
+  id             String   @id @default(uuid())
+  organizationId String?
+  componentType  String // "SALARY", "PF", "ESI", "TAX", "NET_PAY", "GRATUITY"
+  roundingMethod String // "DECIMAL_2", "NEAREST_RUPEE", "FLOOR", "CEIL"
+  decimalPlaces  Int      @default(2)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId, isActive])
+}
+
+// ── Payroll Calculation Audit Log ──
+// Stores EVERY formula execution for audit & dispute resolution
+model PayrollCalculationLog {
+  id              String   @id @default(uuid())
+  organizationId  String?
+  employeeId      String
+  payrollMonth    Int
+  payrollYear     Int
+  payrollRunId    String?
+  stepNumber      Int // Which step (1-14) in the calculation flow
+  stepName        String // "LOAD_EMPLOYEE", "CALCULATE_EARNINGS", etc.
+  componentCode   String? // Which component was calculated
+  formulaUsed     String // Human-readable formula
+  inputValues     Json // All inputs to this calculation
+  outputValue     Float? // Result
+  outputData      Json? // For complex outputs (breakdowns, etc.)
+  executionTimeMs Int // How long this step took
+  status          String   @default("SUCCESS") // "SUCCESS", "ERROR", "WARNING"
+  errorMessage    String?
+  calculatedById  String?
+  createdAt       DateTime @default(now())
+
+  @@index([employeeId, payrollMonth, payrollYear])
+  @@index([payrollRunId])
+  @@index([organizationId, createdAt])
+}
+
+// ── Payroll Run V2 (Enhanced with workflow steps) ──
+model PayrollRunV2 {
+  id                  String    @id @default(uuid())
+  organizationId      String?
+  runCode             String    @unique // "PRUN-202506-0001"
+  month               Int
+  year                Int
+  financialYear       String? // "2025-26"
+  status              String    @default("OPEN")
+  // Status flow: OPEN → ATTENDANCE_IMPORTED → LOP_CALCULATED → VARIABLE_INPUTS_DONE →
+  //              BONUS_APPLIED → REIMBURSEMENTS_APPLIED → LOAN_RECOVERY_DONE →
+  //              PREVIEW → MANAGER_APPROVAL → HR_APPROVAL → FINANCE_APPROVAL →
+  //              LOCKED → PAYSLIPS_GENERATED → BANK_FILE_GENERATED →
+  //              COMPLIANCE_DONE → CLOSED
+  currentStep         Int       @default(1)
+  totalEmployees      Int       @default(0)
+  processedEmployees  Int       @default(0)
+  errorEmployees      Int       @default(0)
+  totalGross          Float     @default(0)
+  totalDeductions     Float     @default(0)
+  totalNet            Float     @default(0)
+  bankFileUrl         String?
+  complianceReportUrl String?
+  processedById       String?
+  lockedById          String?
+  lockedAt            DateTime?
+  closedAt            DateTime?
+  runLog              Json? // Full audit trail
+  errorLog            Json? // Errors during processing
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  employees PayrollRunEmployee[]
+
+  @@unique([organizationId, month, year])
+  @@index([organizationId, status])
+}
+
+// ── Employee Record within a Payroll Run ──
+model PayrollRunEmployee {
+  id                   String    @id @default(uuid())
+  runId                String
+  employeeId           String
+  salaryAssignmentId   String?
+  // Attendance
+  payrollDays          Float     @default(0) // Total calendar/working days
+  presentDays          Float     @default(0)
+  lopDays              Float     @default(0)
+  payableDays          Float     @default(0)
+  weeklyOffs           Float     @default(0)
+  holidays             Float     @default(0)
+  paidLeaves           Float     @default(0)
+  unpaidLeaves         Float     @default(0)
+  halfDays             Float     @default(0)
+  // Financials
+  basicEarned          Float     @default(0)
+  grossEarnings        Float     @default(0)
+  totalEarnings        Float     @default(0)
+  totalStatutory       Float     @default(0)
+  totalTax             Float     @default(0)
+  totalOtherDeductions Float     @default(0)
+  totalDeductions      Float     @default(0)
+  netSalary            Float     @default(0)
+  // Breakdowns
+  earningsBreakdown    Json? // { "BASIC": 25000, "HRA": 12500, ... }
+  deductionsBreakdown  Json? // { "PF": 1800, "ESI": 150, ... }
+  statutoryBreakdown   Json? // { "PF_EMPLOYEE": 1800, "PF_EMPLOYER": 1800, "EPS": ... }
+  taxBreakdown         Json? // { "projectedIncome": ..., "monthlyTDS": ... }
+  attendanceBreakdown  Json? // Full attendance detail
+  // Bonus, Reimbursement, Loan, Arrear
+  bonusAmount          Float     @default(0)
+  overtimeAmount       Float     @default(0)
+  reimbursementAmount  Float     @default(0)
+  loanRecovery         Float     @default(0)
+  advanceRecovery      Float     @default(0)
+  arrearAmount         Float     @default(0)
+  leaveEncashment      Float     @default(0)
+  // Status
+  status               String    @default("PENDING") // PENDING, CALCULATED, VERIFIED, ERROR
+  errorMessage         String?
+  calculatedAt         DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  run PayrollRunV2 @relation(fields: [runId], references: [id])
+
+  @@unique([runId, employeeId])
+  @@index([runId, status])
+}
+
+// ── Financial Year Configuration ──
+model PayrollFinancialYear {
+  id             String   @id @default(uuid())
+  organizationId String?
+  name           String // e.g. "FY 2025-26"
+  startDate      DateTime
+  endDate        DateTime
+  status         String   @default("ACTIVE") // ACTIVE, LOCKED
+  isLocked       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+// ── Payroll Workflow Configuration ──
+model PayrollWorkflowConfig {
+  id             String   @id @default(uuid())
+  organizationId String?
+  workflowType   String // "PAYROLL_RUN", "LOAN", "REIMBURSEMENT", "BONUS", "FNF", "TAX_DECLARATION"
+  approvalLevels Json // Array of { level: 1, role: "MANAGER", autoApproveDays: 3 }
+  status         String   @default("ACTIVE") // ACTIVE, INACTIVE
+  effectiveFrom  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  instances PayrollWorkflowInstance[]
+
+  @@unique([organizationId, workflowType])
+}
+
+// ── Payroll Workflow Instance ──
+model PayrollWorkflowInstance {
+  id               String    @id @default(uuid())
+  workflowConfigId String
+  entityType       String // "PAYROLL_RUN", "LOAN", "REIMBURSEMENT", "BONUS", "FNF", "TAX_DECLARATION"
+  entityId         String // ID of the referenced entity (e.g. loanApplicationId)
+  currentLevel     Int       @default(1)
+  currentStatus    String    @default("PENDING") // PENDING, APPROVED, REJECTED, ESCALATED
+  initiatedById    String
+  completedAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  config PayrollWorkflowConfig @relation(fields: [workflowConfigId], references: [id])
+  steps  PayrollWorkflowStep[]
+
+  @@index([entityType, entityId])
+}
+
+// ── Payroll Workflow Step ──
+model PayrollWorkflowStep {
+  id                  String    @id @default(uuid())
+  instanceId          String
+  level               Int
+  assignedToRole      String // "MANAGER", "HR", "FINANCE", "PAYROLL_MANAGER", "ADMIN"
+  assignedToId        String? // If assigned to a specific user (e.g. employee's manager ID)
+  action              String    @default("PENDING") // PENDING, APPROVED, REJECTED, ESCALATED, AUTO_APPROVED
+  comments            String?
+  actionAt            DateTime?
+  autoApproveDeadline DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  instance PayrollWorkflowInstance @relation(fields: [instanceId], references: [id])
+}
+
+// ── Payroll Query (Two-Way Communication) ──
+model PayrollQuery {
+  id             String    @id @default(uuid())
+  organizationId String?
+  employeeId     String
+  category       String // "PAYSLIP", "TAX", "REIMBURSEMENT", "LOAN", "COMPLIANCE", "OTHER"
+  subject        String
+  description    String
+  month          Int?
+  year           Int?
+  status         String    @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  priority       String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  assignedToId   String?
+  resolvedAt     DateTime?
+  resolution     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  comments PayrollQueryComment[]
+
+  @@index([employeeId, status])
+  @@index([organizationId])
+}
+
+// ── Payroll Query Comment ──
+model PayrollQueryComment {
+  id            String   @id @default(uuid())
+  queryId       String
+  commentById   String
+  commentByName String
+  commentByRole String // "EMPLOYEE", "MANAGER", "HR", "FINANCE", "PAYROLL_MANAGER", "ADMIN"
+  message       String
+  attachmentUrl String?
+  createdAt     DateTime @default(now())
+
+  query PayrollQuery @relation(fields: [queryId], references: [id], onDelete: Cascade)
+}
+
+// ── Payroll Notification ──
+model PayrollNotification {
+  id            String    @id @default(uuid())
+  recipientId   String
+  recipientRole String?
+  type          String // "APPROVAL_REQUEST", "APPROVED", "REJECTED", "QUERY_UPDATE", "PAYSLIP_RELEASED"
+  title         String
+  message       String
+  entityType    String?
+  entityId      String?
+  isRead        Boolean   @default(false)
+  readAt        DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+// ── Payroll Audit Log ──
+model PayrollAuditLog {
+  id              String   @id @default(uuid())
+  organizationId  String?
+  action          String // "CREATE", "UPDATE", "DELETE", "APPROVE", "CALCULATE", "LOCK"
+  module          String // "CONFIG", "SALARY", "RUN", "TAX", "LOAN", "REIMBURSEMENT"
+  entityType      String
+  entityId        String
+  oldValue        Json?
+  newValue        Json?
+  performedById   String
+  performedByName String
+  performedByRole String
+  ipAddress       String?
+  createdAt       DateTime @default(now())
+}

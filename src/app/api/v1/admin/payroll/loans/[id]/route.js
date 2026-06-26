@@ -8,7 +8,7 @@ export async function PUT(req, { params }) {
         authorize(authUser, ["admin", "super_admin"]);
         
         const { id } = await params;
-        const body = await request ? await req.json() : {};
+        const body = await req.json();
         const { status, rejectionReason } = body;
 
         const loan = await prisma.loan.findFirst({ where: { OR: [{ id: id }, { mongoId: id }] } });
@@ -35,12 +35,14 @@ export async function PUT(req, { params }) {
                 loanData.approvedBy = authUser.id;
                 loanData.approvalDate = new Date().toISOString();
                 
+                const installments = Number(loanData.installments || 1);
+                const amount = loan.amount || loanData.amount || 0;
+                const installmentAmount = Math.round(amount / installments);
+                updateData.emi = installmentAmount;
+                
                 // --- AUTOMATIC REPAYMENT SCHEDULE GENERATION ---
                 if (!loanData.repaymentSchedule || loanData.repaymentSchedule.length === 0) {
                     const schedule = [];
-                    const installments = loanData.installments || 1;
-                    const amount = loan.amount || loanData.amount || 0;
-                    const installmentAmount = Math.round(amount / installments);
                     const startDate = new Date();
                     
                     for (let i = 1; i <= installments; i++) {
